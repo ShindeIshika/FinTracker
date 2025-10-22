@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "427334465779",
+    "project_id": "fintracker-96098",
+    "storage_bucket": "fintracker-96098.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:427334465779:android:7e6e09e6109eb70c149f86",
+        "android_client_info": {
+          "package_name": "com.example.flutter_fintracker"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAfadAotmmqcKQVM5NchhmqHL0nZPseE50"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
