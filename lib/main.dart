@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'fintracker_login.dart'; 
+//import 'fintracker_signup.dart';
 import 'package:firebase_core/firebase_core.dart'; // Firebase core
 import 'firebase_options.dart'; // correct file name
 // import your page widgets
