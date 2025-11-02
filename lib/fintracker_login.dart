@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter_fintracker/fintracker_expenses.dart';
 import 'fintracker_signup.dart';
-import 'fintracker_trackgoal.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -49,10 +49,10 @@ class _LoginPageState extends State<LoginPage> {
 
       if (querySnapshot.docs.isNotEmpty) {
         final email = querySnapshot.docs.first.data()['email'] as String?;
-        print("✅ Found email for $username: $email");
+        print(" Found email for $username: $email");
         return email;
       } else {
-        print("❌ No document found for username: $username");
+        print(" No document found for username: $username");
         return null;
       }
     } catch (e) {
@@ -97,7 +97,7 @@ class _LoginPageState extends State<LoginPage> {
       print("🚀 Attempting FirebaseAuth login with: $emailToUse");
 
       final user = await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: emailToUse!,
+        email: emailToUse,
         password: password,
       );
 
@@ -107,7 +107,7 @@ class _LoginPageState extends State<LoginPage> {
       
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => const TrackGoalsPage()),
+        MaterialPageRoute(builder: (context) => const ExpensesPage()),
       );
     } on FirebaseAuthException catch (e) {
       print("🔥 FirebaseAuthException: ${e.code} - ${e.message}");

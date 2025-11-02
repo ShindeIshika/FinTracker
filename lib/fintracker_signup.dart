@@ -11,10 +11,7 @@ class FintrackerSignUp extends StatefulWidget {
 }
 
 class _FintrackerSignUpState extends State<FintrackerSignUp> {
-  // 🔹 Form key
   final _formKey = GlobalKey<FormState>();
-
-  // 🔹 Controllers
   final TextEditingController firstName = TextEditingController();
   final TextEditingController lastName = TextEditingController();
   final TextEditingController userName = TextEditingController();
@@ -36,9 +33,6 @@ class _FintrackerSignUpState extends State<FintrackerSignUp> {
       RegExp(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$');
   final RegExp _usernameRegex = RegExp(r'^[a-z][a-z0-9_]{3,15}$');
 
-  // ==========================================================
-  // 🔹 Helper Functions
-  // ==========================================================
 
   void _showSnack(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
