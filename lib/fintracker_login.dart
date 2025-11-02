@@ -1,7 +1,8 @@
-import 'package:flutter/material.dart'; 
+import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // REQUIRED for username lookup
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'fintracker_signup.dart';
+import 'fintracker_trackgoal.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -11,23 +12,21 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
+  // ==========================================================
+  // 🔹 Controllers & State
+  // ==========================================================
   final _formKey = GlobalKey<FormState>();
   final TextEditingController loginIdController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
+
   bool isPasswordVisible = false;
-  
-  // Instance to interact with Firestore
-  final FirebaseFirestore _db = FirebaseFirestore.instance; 
-  
-  // State to toggle between Username (true) and Email (false) login mode
-  bool _isUsingUsername = true; 
+  bool _isUsingUsername = true; // Toggle between username/email login
 
-  // --- Utility & Database Functions ---
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  // Helper to check if the input looks like an email (simple check)
-  bool _isEmail(String input) {
-    return input.contains('@');
-  }
+  // ==========================================================
+  // 🔹 Helper Functions
+  // ==========================================================
 
   void _showSnackbar(String message) {
     if (mounted) {
@@ -36,76 +35,92 @@ class _LoginPageState extends State<LoginPage> {
       );
     }
   }
-  
-  // 🔑 CRITICAL FUNCTION: Looks up the email in Firestore using the username
+
+  // 🔍 Fetch email from Firestore using username
   Future<String?> _fetchEmailFromDatabase(String username) async {
     try {
-      // Query the 'users' collection where the 'username' field matches the input
+      print("🔹 Looking up Firestore for username: $username");
+
       final querySnapshot = await _db
-          .collection('users') 
+          .collection('users')
           .where('username', isEqualTo: username)
-          .limit(1) 
+          .limit(1)
           .get();
 
       if (querySnapshot.docs.isNotEmpty) {
-        // Return the 'email' field from the found document
-        return querySnapshot.docs.first.data()['email'] as String?;
+        final email = querySnapshot.docs.first.data()['email'] as String?;
+        print("✅ Found email for $username: $email");
+        return email;
+      } else {
+        print("❌ No document found for username: $username");
+        return null;
       }
-      return null; // Username not found
     } catch (e) {
-      print('Firestore lookup error: $e');
-      _showSnackbar('A database error occurred. Please check your connection.');
+      print("🔥 Firestore lookup error: $e");
+      _showSnackbar('Database lookup failed.');
       return null;
     }
   }
 
-  // --- Login Logic ---
+  // ==========================================================
+  // 🔹 Login Logic
+  // ==========================================================
 
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
-      
-    String input = loginIdController.text.trim();
-    String emailToUse = '';
 
-    // 1. Determine the email address to use for Firebase Auth
-    if (_isUsingUsername) {
-      if (_isEmail(input)) {
-        // Case A: User entered an email while in "Username" mode (Acceptable)
-        emailToUse = input;
-      } else {
-        // Case B: User entered a non-email value (a true Username)
-        
-        _showSnackbar('Verifying username...');
-        
-        // 🚨 CRITICAL STEP: Fetch the email from Firestore using the username
-        String? fetchedEmail = await _fetchEmailFromDatabase(input);
-        
+    final input = loginIdController.text.trim();
+    final password = passwordController.text.trim();
+    String? emailToUse;
+
+    print("\n========== LOGIN ATTEMPT ==========");
+    print("🔹 Input: $input");
+    print("🔹 Mode: ${_isUsingUsername ? 'Username' : 'Email'}");
+    print("==================================");
+
+    _showSnackbar('Verifying credentials...');
+
+    try {
+      if (_isUsingUsername) {
+        // 🔍 Username mode → Lookup Firestore for email
+        final fetchedEmail = await _fetchEmailFromDatabase(input);
         if (fetchedEmail == null) {
           _showSnackbar('Username not found. Please check your entry.');
           return;
         }
         emailToUse = fetchedEmail;
+      } else {
+        // 📧 Email mode → Use input directly
+        emailToUse = input;
       }
-    } else {
-      // Case C: User is in "Email" mode (Input is guaranteed to be an email by validator)
-      emailToUse = input;
-    }
 
-    // 2. Attempt Firebase sign-in using the determined email address
-    try {
-      UserCredential user = await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: emailToUse, 
-        password: passwordController.text.trim(),
+      print("🚀 Attempting FirebaseAuth login with: $emailToUse");
+
+      final user = await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: emailToUse!,
+        password: password,
       );
 
+      print("✅ Login successful for: ${user.user?.email}");
       _showSnackbar('Login Successful! Welcome ${user.user?.email}');
       // TODO: Navigate to HomePage
-
+      
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const TrackGoalsPage()),
+      );
     } on FirebaseAuthException catch (e) {
-      // Catch specific Firebase auth errors (e.g., wrong password, user not found)
-      _showSnackbar(e.message ?? 'Login failed. Check your credentials.');
+      print("🔥 FirebaseAuthException: ${e.code} - ${e.message}");
+      _showSnackbar(e.message ?? 'Login failed. Please try again.');
+    } catch (e) {
+      print("🔥 Unexpected login error: $e");
+      _showSnackbar('An unexpected error occurred.');
     }
   }
+
+  // ==========================================================
+  // 🔹 UI BUILD
+  // ==========================================================
 
   @override
   Widget build(BuildContext context) {
@@ -122,63 +137,70 @@ class _LoginPageState extends State<LoginPage> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Logo
+                    // --- App Logo ---
                     ClipOval(
                       child: Image.asset(
                         'assets/images/FinTracker_Logo.png',
-                        width: 180, 
-                        height: 180, 
-                        fit: BoxFit.cover, 
+                        width: 180,
+                        height: 180,
+                        fit: BoxFit.cover,
                       ),
                     ),
                     const SizedBox(height: 20),
 
-                    // 4. Dynamic Login Field (Username or Email)
+                    // --- Username / Email Field ---
                     TextFormField(
                       controller: loginIdController,
-                      keyboardType: _isUsingUsername ? TextInputType.text : TextInputType.emailAddress,
+                      keyboardType: _isUsingUsername
+                          ? TextInputType.text
+                          : TextInputType.emailAddress,
                       decoration: InputDecoration(
-                        // Dynamic label based on the state
                         labelText: _isUsingUsername ? "Username" : "Email",
-                        // Dynamic icon based on the state
-                        prefixIcon: Icon(_isUsingUsername ? Icons.person_outline : Icons.email_outlined),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        prefixIcon: Icon(
+                          _isUsingUsername
+                              ? Icons.person_outline
+                              : Icons.email_outlined,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                         filled: true,
                         fillColor: Colors.white,
                       ),
                       validator: (value) {
                         if (value == null || value.isEmpty) {
-                          return _isUsingUsername ? "Please enter your username" : "Please enter your email";
+                          return _isUsingUsername
+                              ? "Please enter your username"
+                              : "Please enter your email";
                         }
-                        // If in Email mode, enforce email validation
-                        if (!_isUsingUsername && !_isEmail(value)) {
-                           return "Enter a valid email address";
+                        if (!_isUsingUsername && !value.contains('@')) {
+                          return "Enter a valid email address";
                         }
                         return null;
                       },
                     ),
 
-                    // 5. Login Toggle Button
+                    // --- Toggle Login Mode ---
                     Align(
                       alignment: Alignment.centerRight,
                       child: TextButton(
                         onPressed: () {
-                          // Toggle the state and clear the input field
                           setState(() {
                             _isUsingUsername = !_isUsingUsername;
                             loginIdController.clear();
                           });
                         },
                         child: Text(
-                          _isUsingUsername ? "Log in with Email" : "Log in with Username",
+                          _isUsingUsername
+                              ? "Login with Email"
+                              : "Login with Username",
                           style: const TextStyle(color: Color(0xFF083549)),
                         ),
                       ),
                     ),
-                    
                     const SizedBox(height: 10),
 
-                    // Password Field
+                    // --- Password Field ---
                     TextFormField(
                       controller: passwordController,
                       obscureText: !isPasswordVisible,
@@ -186,44 +208,60 @@ class _LoginPageState extends State<LoginPage> {
                         labelText: "Password",
                         prefixIcon: const Icon(Icons.lock_outline),
                         suffixIcon: IconButton(
-                          icon: Icon(isPasswordVisible ? Icons.visibility : Icons.visibility_off),
+                          icon: Icon(
+                            isPasswordVisible
+                                ? Icons.visibility
+                                : Icons.visibility_off,
+                          ),
                           onPressed: () {
                             setState(() {
                               isPasswordVisible = !isPasswordVisible;
                             });
                           },
                         ),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                         filled: true,
                         fillColor: Colors.white,
                       ),
                       validator: (value) {
-                        if (value == null || value.isEmpty) return "Please enter your password";
-                        if (value.length < 6) return "Password must be at least 6 characters";
+                        if (value == null || value.isEmpty) {
+                          return "Please enter your password";
+                        }
+                        if (value.length < 6) {
+                          return "Password must be at least 6 characters";
+                        }
                         return null;
                       },
                     ),
                     const SizedBox(height: 30),
 
-                    // Login button 
+                    // --- Login Button ---
                     SizedBox(
                       width: double.infinity,
                       height: 50,
                       child: ElevatedButton(
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF083549),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
-                        onPressed: _login, // Calls the updated login logic
+                        onPressed: _login,
                         child: const Text(
                           "Login",
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
                         ),
                       ),
                     ),
                     const SizedBox(height: 20),
 
-                    // Sign up link
+                    // --- Sign Up Redirect ---
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -232,12 +270,17 @@ class _LoginPageState extends State<LoginPage> {
                           onTap: () {
                             Navigator.push(
                               context,
-                              MaterialPageRoute(builder: (context) => const FintrackerSignUp()),
+                              MaterialPageRoute(
+                                builder: (context) => const FintrackerSignUp(),
+                              ),
                             );
                           },
                           child: const Text(
                             "Sign up",
-                            style: TextStyle(color: Color(0xFF083549), fontWeight: FontWeight.bold),
+                            style: TextStyle(
+                              color: Color(0xFF083549),
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
                       ],
