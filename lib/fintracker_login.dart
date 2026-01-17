@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter_fintracker/fintracker_expenses.dart';
+import 'package:flutter_fintracker/fintracker_home.dart';
 import 'fintracker_signup.dart';
 
 class LoginPage extends StatefulWidget {
@@ -103,11 +103,10 @@ class _LoginPageState extends State<LoginPage> {
 
       print("✅ Login successful for: ${user.user?.email}");
       _showSnackbar('Login Successful! Welcome ${user.user?.email}');
-      // TODO: Navigate to HomePage
       
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => const ExpensesPage()),
+        MaterialPageRoute(builder: (context) =>  DashboardScreen()),
       );
     } on FirebaseAuthException catch (e) {
       print("🔥 FirebaseAuthException: ${e.code} - ${e.message}");

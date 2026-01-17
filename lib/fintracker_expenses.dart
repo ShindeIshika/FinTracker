@@ -175,7 +175,7 @@ class _ExpensesPageState extends State<ExpensesPage> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF0A3D52),
               ),
-              child: const Text("Save"),
+              child: const Text("Save",style: TextStyle(color: Colors.white),),
             ),
           ],
         );

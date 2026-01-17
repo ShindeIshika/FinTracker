@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_fintracker/fintracker_expenses.dart';
-import 'fintracker_login.dart'; 
+import 'package:flutter_fintracker/fintracker_home.dart';
+//import 'fintracker_login.dart'; 
 import 'package:firebase_core/firebase_core.dart'; // Firebase core
+import 'package:flutter_fintracker/fintracker_login.dart';
 import 'firebase_options.dart'; // correct file name
 // import your page widgets
 
