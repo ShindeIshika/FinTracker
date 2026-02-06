@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:math';
 
 class AddTransactionPage extends StatefulWidget {
   final String type; // 'income' or 'expense'
@@ -11,23 +12,31 @@ class AddTransactionPage extends StatefulWidget {
   State<AddTransactionPage> createState() => _AddTransactionPageState();
 }
 
+// Category colors for PieChart (can be moved to global file)
+final Map<String, Color> categoryColors = {
+  'Food': const Color.fromARGB(255, 91, 54, 0),
+  'Travel': const Color.fromARGB(255, 2, 54, 97),
+  'Shopping': const Color.fromARGB(255, 68, 2, 79),
+  'Bills': const Color.fromARGB(255, 156, 12, 2),
+  'Salary': const Color.fromARGB(255, 0, 100, 90),
+  'Bonus': Colors.green,
+  'Interest': Colors.blue,
+  'Other': Colors.grey,
+  'General': Colors.purple,
+};
+
 class _AddTransactionPageState extends State<AddTransactionPage> {
   final _formKey = GlobalKey<FormState>();
   final _amountController = TextEditingController();
   final _newCategoryController = TextEditingController();
 
-  String _selectedCategory = 'General';
+  String _selectedCategory = '';
   String _selectedAccount = 'Cash';
   DateTime _selectedDate = DateTime.now();
 
-  final List<String> categories = [
-    'Food',
-    'Travel',
-    'Shopping',
-    'Bills',
-    'Salary',
-    'General',
-  ];
+  // Separate categories for income and expense
+  List<String> incomeCategories = ['Salary', 'Bonus', 'Interest', 'Other'];
+  List<String> expenseCategories = ['Food', 'Travel', 'Shopping', 'Bills', 'General'];
 
   final List<String> accounts = ['Cash', 'Bank', 'GPay'];
 
@@ -37,66 +46,69 @@ class _AddTransactionPageState extends State<AddTransactionPage> {
   final Color primaryBlue = const Color(0xFF083549);
   final Color accentRed = Colors.redAccent;
 
+  @override
+  void initState() {
+    super.initState();
+    // Initialize selected category to first in the list for the type
+    final currentCategories =
+        widget.type == 'income' ? incomeCategories : expenseCategories;
+    _selectedCategory = currentCategories.isNotEmpty ? currentCategories.first : 'Other';
+  }
+
   Future<void> _saveTransaction() async {
-  final user = _auth.currentUser;
+    final user = _auth.currentUser;
 
-  if (user == null) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("User not logged in")),
-    );
-    return;
-  }
-
-  if (!_formKey.currentState!.validate()) {
-    return;
-  }
-
-  final double amount = double.parse(_amountController.text);
-
-  try {
-    // 1️⃣ Save transaction
-    await _firestore.collection('transactions').add({
-      'uid': user.uid,
-      'type': widget.type, // 'income' or 'expense'
-      'amount': amount,
-      'category': _selectedCategory,
-      'account': _selectedAccount,
-      'date': Timestamp.fromDate(_selectedDate),
-      'createdAt': FieldValue.serverTimestamp(),
-    });
-
-    // 2️⃣ Update budget ONLY if EXPENSE
-    if (widget.type == 'expense') {
-      final budgetQuery = await _firestore
-          .collection('budgets')
-          .where('uid', isEqualTo: user.uid)
-          .where('category', isEqualTo: _selectedCategory)
-          .limit(1)
-          .get();
-
-      if (budgetQuery.docs.isNotEmpty) {
-        final budgetDoc = budgetQuery.docs.first;
-
-        await _firestore
-            .collection('budgets')
-            .doc(budgetDoc.id)
-            .update({
-          'spent': FieldValue.increment(amount),
-        });
-      }
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("User not logged in")),
+      );
+      return;
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Transaction added successfully")),
-    );
+    if (!_formKey.currentState!.validate()) return;
 
-    Navigator.pop(context, true);
-  } catch (e) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("Error: $e")),
-    );
+    final double amount = double.parse(_amountController.text);
+
+    try {
+      // 1️⃣ Save transaction
+      await _firestore.collection('transactions').add({
+        'uid': user.uid,
+        'type': widget.type,
+        'amount': amount,
+        'category': _selectedCategory,
+        'account': _selectedAccount,
+        'date': Timestamp.fromDate(_selectedDate),
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      // 2️⃣ Update budget ONLY if EXPENSE
+      if (widget.type == 'expense') {
+        final budgetQuery = await _firestore
+            .collection('budgets')
+            .where('uid', isEqualTo: user.uid)
+            .where('category', isEqualTo: _selectedCategory)
+            .limit(1)
+            .get();
+
+        if (budgetQuery.docs.isNotEmpty) {
+          final budgetDoc = budgetQuery.docs.first;
+          await _firestore.collection('budgets').doc(budgetDoc.id).update({
+            'spent': FieldValue.increment(amount),
+          });
+        }
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Transaction added successfully")),
+      );
+
+      Navigator.pop(context, true);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error: $e")),
+      );
+    }
   }
-}
 
   void _addNewCategory() {
     showDialog(
@@ -109,28 +121,41 @@ class _AddTransactionPageState extends State<AddTransactionPage> {
         ),
         actions: [
           TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-            },
+            onPressed: () => Navigator.pop(ctx),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: primaryBlue),
             onPressed: () {
               final newCat = _newCategoryController.text.trim();
-              if (newCat.isNotEmpty && !categories.contains(newCat)) {
+              if (newCat.isNotEmpty) {
                 setState(() {
-                  categories.add(newCat);
+                  if (widget.type == 'income') {
+                    if (!incomeCategories.contains(newCat)) incomeCategories.add(newCat);
+                  } else {
+                    if (!expenseCategories.contains(newCat)) expenseCategories.add(newCat);
+                  }
                   _selectedCategory = newCat;
+
+                  // Generate unique random color if not exists
+                  categoryColors.putIfAbsent(newCat, () {
+                    final random = Random();
+                    return Color.fromARGB(
+                      255,
+                      random.nextInt(156) + 100,
+                      random.nextInt(156) + 100,
+                      random.nextInt(156) + 100,
+                    );
+                  });
                 });
               }
               _newCategoryController.clear();
               Navigator.pop(ctx);
             },
-            child: const Text('Add',
-            style: TextStyle(
-              color: Colors.white,
-            ),),
+            child: const Text(
+              'Add',
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),
@@ -139,13 +164,16 @@ class _AddTransactionPageState extends State<AddTransactionPage> {
 
   @override
   Widget build(BuildContext context) {
+    final currentCategories =
+        widget.type == 'income' ? incomeCategories : expenseCategories;
+
     return Scaffold(
       appBar: AppBar(
         backgroundColor: primaryBlue,
         iconTheme: const IconThemeData(color: Colors.white),
         title: Text(
           widget.type == 'expense' ? 'Add Expense' : 'Add Income',
-          style: TextStyle(color: Colors.white),
+          style: const TextStyle(color: Colors.white),
         ),
       ),
       body: Padding(
@@ -174,12 +202,8 @@ class _AddTransactionPageState extends State<AddTransactionPage> {
                   ),
                 ),
                 validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Amount required';
-                  }
-                  if (double.tryParse(value) == null) {
-                    return 'Enter a valid number';
-                  }
+                  if (value == null || value.isEmpty) return 'Amount required';
+                  if (double.tryParse(value) == null) return 'Enter a valid number';
                   return null;
                 },
               ),
@@ -204,7 +228,8 @@ class _AddTransactionPageState extends State<AddTransactionPage> {
               ),
               DropdownButtonFormField<String>(
                 value: _selectedCategory,
-                items: categories
+                items: currentCategories
+                    .toSet()
                     .map(
                       (c) => DropdownMenuItem(
                         value: c,
@@ -297,10 +322,7 @@ class _AddTransactionPageState extends State<AddTransactionPage> {
                 onPressed: _saveTransaction,
                 child: const Text(
                   'Save Transaction',
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.white,
-                  ),
+                  style: TextStyle(fontSize: 16, color: Colors.white),
                 ),
               ),
             ],

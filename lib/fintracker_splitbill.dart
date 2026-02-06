@@ -1,205 +1,220 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter_fintracker/fintracker_home.dart';
+import 'package:flutter_fintracker/fintracker_budget.dart';
+import 'widgets/side_nav.dart';
 
-class SplitBillPage extends StatefulWidget {
-  const SplitBillPage({super.key});
+
+class SplitBillsScreen extends StatefulWidget {
+  const SplitBillsScreen({super.key});
 
   @override
-  State<SplitBillPage> createState() => _SplitBillPageState();
+  State<SplitBillsScreen> createState() => _SplitBillsScreenState();
 }
 
-class _SplitBillPageState extends State<SplitBillPage> {
-  final TextEditingController _totalAmountController = TextEditingController();
-  final List<TextEditingController> _nameControllers = [];
-  double _splitAmount = 0.0;
+class _SplitBillsScreenState extends State<SplitBillsScreen> {
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  void _addPerson() {
-    setState(() {
-      _nameControllers.add(TextEditingController());
-    });
-  }
-
-  void _removePerson(int index) {
-    setState(() {
-      _nameControllers.removeAt(index);
-    });
-  }
-
-  void _calculateSplit() {
-    if (_nameControllers.isEmpty || _totalAmountController.text.isEmpty) return;
-    final total = double.tryParse(_totalAmountController.text) ?? 0.0;
-    final perPerson = total / _nameControllers.length;
-
-    setState(() {
-      _splitAmount = perPerson;
-    });
-  }
+  int selectedNavIndex = 4; // Split Bills
+  bool loading = true;
+  List<Map<String, dynamic>> splits = [];
 
   @override
-  void dispose() {
-    _totalAmountController.dispose();
-    for (var controller in _nameControllers) {
-      controller.dispose();
+  void initState() {
+    super.initState();
+    fetchSplitBills();
+  }
+
+  Future<void> fetchSplitBills() async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+
+    final snapshot = await _firestore
+        .collection('SplitTheBill')
+        .orderBy('createdAt', descending: true)
+        .get();
+
+    final List<Map<String, dynamic>> temp = [];
+    for (var doc in snapshot.docs) {
+      final data = doc.data();
+      // Only include splits where current user is a participant
+      final participants = List<Map<String, dynamic>>.from(data['participants'] ?? []);
+      if (participants.any((p) => p['uid'] == user.uid) || data['uid'] == user.uid) {
+        temp.add(data);
+      }
     }
-    super.dispose();
+
+    setState(() {
+      splits = temp;
+      loading = false;
+    });
+  }
+
+  void handleNavTap(int index) {
+    if (index == selectedNavIndex) return;
+
+    switch (index) {
+      case 0:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const DashboardScreen()),
+        );
+        break;
+      case 2:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const BudgetPlannerScreen()),
+        );
+        break;
+      case 4:
+        break; // Already here
+    }
+
+    setState(() {
+      selectedNavIndex = index;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    const darkBlue = Color(0xFF0A3D52);
-
     return Scaffold(
-      backgroundColor: Colors.blueGrey[50],
-      appBar: AppBar(
-        backgroundColor: darkBlue,
-        title: const Text(
-          'Split the Bill',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
-        ),
-        centerTitle: true,
-      ),
-
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Total amount
-              const Text(
-                'Enter Total Amount:',
-                style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: darkBlue,
-                    fontSize: 16),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _totalAmountController,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  hintText: 'e.g. 1200',
-                  prefixIcon: const Icon(Icons.currency_rupee),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 20),
-
-              // People section
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'People:',
-                    style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: darkBlue,
-                        fontSize: 16),
-                  ),
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: darkBlue,
-                    ),
-                    onPressed: _addPerson,
-                    icon: const Icon(Icons.person_add, color: Colors.white),
-                    label: const Text('Add', style: TextStyle(color: Colors.white)),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-
-              // List of people
-              Column(
-                children: _nameControllers.asMap().entries.map((entry) {
-                  final index = entry.key;
-                  final controller = entry.value;
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 6),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: controller,
-                            decoration: InputDecoration(
-                              hintText: 'Person ${index + 1}',
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                            ),
+      body: Row(
+        children: [
+          SideNav(selectedIndex: selectedNavIndex, onItemTap: handleNavTap),
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              color: Colors.white, // ✅ White background
+              child: loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            "Split Bills",
+                            style: TextStyle(
+                                fontSize: 28,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF083549)),
                           ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.delete, color: Colors.redAccent),
-                          onPressed: () => _removePerson(index),
-                        ),
-                      ],
+                          const SizedBox(height: 4),
+                          const Text(
+                            "Split expenses with friends and track payments",
+                            style: TextStyle(fontSize: 16, color: Colors.blueGrey),
+                          ),
+                          const SizedBox(height: 20),
+
+                          // Split list
+                          Column(
+                            children: splits.map((split) {
+                              return _splitCard(split);
+                            }).toList(),
+                          ),
+                        ],
+                      ),
                     ),
-                  );
-                }).toList(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _splitCard(Map<String, dynamic> split) {
+    final participants = List<Map<String, dynamic>>.from(split['participants'] ?? []);
+    final isPaid = split['paid'] ?? false;
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey[100],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Title & Your share
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                split['title'] ?? 'Untitled',
+                style: const TextStyle(
+                    fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF083549)),
               ),
-
-              const SizedBox(height: 20),
-
-              // Calculate Button
-              Center(
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color.fromARGB(255, 146, 33, 33),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 40, vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  onPressed: _calculateSplit,
-                  child: const Text(
-                    'Split Bill',
-                    style: TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.bold),
-                  ),
+              Text(
+                "Your share: \$${split['amount'] ?? 0}",
+                style: TextStyle(
+                  color: isPaid ? Colors.green : Colors.orange,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
-
-              const SizedBox(height: 20),
-
-              if (_splitAmount > 0)
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: const [
-                      BoxShadow(color: Colors.black12, blurRadius: 4),
-                    ],
-                  ),
-                  child: Column(
-                    children: [
-                      const Text(
-                        'Each person should pay:',
-                        style: TextStyle(
-                            color: darkBlue, fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        '₹${_splitAmount.toStringAsFixed(2)}',
-                        style: const TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: darkBlue,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
             ],
           ),
-        ),
+          const SizedBox(height: 6),
+          Text(
+            "Created by ${split['name'] ?? 'Unknown'} on ${split['createdAt'] != null ? (split['createdAt'] as Timestamp).toDate().toLocal().toString().split(' ')[0] : 'Unknown'}",
+            style: const TextStyle(color: Colors.blueGrey),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            children: participants.map((p) {
+              return _participantTile(p);
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _participantTile(Map<String, dynamic> p) {
+    final name = p['name'] ?? 'Unknown';
+    final amount = p['amount'] ?? 0.0;
+    final paid = p['paid'] ?? false;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          CircleAvatar(
+            radius: 12,
+            backgroundColor: Colors.blue.shade200,
+            child: Text(
+              name[0].toUpperCase(),
+              style: const TextStyle(fontSize: 12, color: Colors.white),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(name),
+          const SizedBox(width: 8),
+          Text(
+            "\$${amount.toStringAsFixed(2)}",
+            style: TextStyle(
+              color: paid ? Colors.green : Colors.orange,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Icon(
+            paid ? Icons.check_circle : Icons.hourglass_bottom,
+            color: paid ? Colors.green : Colors.orange,
+            size: 16,
+          ),
+        ],
       ),
     );
   }

@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_fintracker/fintracker_login.dart';
-import 'add_transaction.dart';
+import 'package:flutter_fintracker/fintracker_splitbill.dart';
+import 'package:flutter_fintracker/add_transaction.dart';
 import 'package:flutter_fintracker/fintracker_budget.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'widgets/side_nav.dart';
@@ -53,7 +54,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
-
   int selectedNavIndex = 0;
   int touchedPieIndex = -1;
   String firstName = "User";
@@ -61,42 +61,46 @@ class _DashboardScreenState extends State<DashboardScreen> {
   double totalIncome = 0;
   double totalExpense = 0;
   double totalBalance = 0;
-  double budget = 0;
 
   List<Map<String, dynamic>> recentTransactions = [];
   List<Map<String, dynamic>> allTransactions = [];
 
-Future<void> showTipOfTheDay() async {
-  final prefs = await SharedPreferences.getInstance();
-  final today = DateTime.now().toIso8601String().split('T').first;
-  final lastShown = prefs.getString('tip_last_shown');
+  bool hasIncome = false;
+  bool hasExpense = false;
 
-  if (lastShown == today) return;
+  Future<void> showTipOfTheDay() async {
+    final prefs = await SharedPreferences.getInstance();
+    final today = DateTime.now().toIso8601String().split('T').first;
+    final lastShown = prefs.getString('tip_last_shown');
 
-  final randomTip = financeTips[Random().nextInt(financeTips.length)];
+    if (lastShown == today) return;
 
-  WidgetsBinding.instance.addPostFrameCallback((_) {
-    showDialog(
-      context: context,
-      barrierDismissible: true,
-      builder: (_) => AlertDialog(
-        title: Text(
-          "💡 ${randomTip['term']}",
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
-        content: Text(randomTip['tip']!),
-        actions: [
-          TextButton(
-            onPressed: () {Navigator.of(context).pop();},
-            child: const Text("Got it"),
+    final randomTip = financeTips[Random().nextInt(financeTips.length)];
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      showDialog(
+        context: context,
+        barrierDismissible: true,
+        builder: (_) => AlertDialog(
+          title: Text(
+            "💡 ${randomTip['term']}",
+            style: const TextStyle(fontWeight: FontWeight.bold),
           ),
-        ],
-      ),
-    );
-  });
+          content: Text(randomTip['tip']!),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: const Text("Got it"),
+            ),
+          ],
+        ),
+      );
+    });
 
-  await prefs.setString('tip_last_shown', today);
-}
+    await prefs.setString('tip_last_shown', today);
+  }
 
   @override
   void initState() {
@@ -107,22 +111,35 @@ Future<void> showTipOfTheDay() async {
   }
 
   void handleNavTap(int index) {
-    if (index == selectedNavIndex) return;
+  if (index == selectedNavIndex) return;
 
-    switch (index) {
-      case 0:
-        break;
-      case 1:
-        break;
-      case 2:
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const BudgetPlannerScreen()),
-        );
-        break;
-      case 3:
-        break;
-    }
+  setState(() {
+    selectedNavIndex = index;
+  });
+
+  switch (index) {
+    case 0: // Dashboard
+      // Already on dashboard, do nothing
+      break;
+    case 1: // Transactions
+      // Navigate to transactions page if exists
+      break;
+    case 2: // Budget
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const BudgetPlannerScreen()),
+      );
+      break;
+    case 3: // Savings
+      // Navigate to savings page if exists
+      break;
+    case 4: // Split Bills
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const SplitBillsScreen()),
+      );
+      break;
+  }
   }
 
   Future<void> fetchUserName() async {
@@ -159,12 +176,12 @@ Future<void> showTipOfTheDay() async {
       }
       tempList.add(data);
     }
-    tempList.sort((a, b) {
-  final aDate = (a['date'] as Timestamp).toDate();
-  final bDate = (b['date'] as Timestamp).toDate();
-  return bDate.compareTo(aDate); // newest first
-});
 
+    tempList.sort((a, b) {
+      final aDate = (a['date'] as Timestamp).toDate();
+      final bDate = (b['date'] as Timestamp).toDate();
+      return bDate.compareTo(aDate);
+    });
 
     setState(() {
       totalIncome = income;
@@ -172,6 +189,8 @@ Future<void> showTipOfTheDay() async {
       totalBalance = income - expense;
       allTransactions = tempList;
       recentTransactions = tempList.take(8).toList();
+      hasIncome = income > 0;
+      hasExpense = expense > 0;
     });
   }
 
@@ -282,10 +301,12 @@ Future<void> showTipOfTheDay() async {
                     const SizedBox(height: 6),
                     Text(
                       "Welcome, $firstName",
-                      style: const TextStyle(fontSize: 16, color: Colors.blueGrey),
+                      style:
+                          const TextStyle(fontSize: 16, color: Colors.blueGrey),
                     ),
                     const SizedBox(height: 20),
 
+                    // ------------------- Stat Cards -------------------
                     Row(
                       children: [
                         _statCard(
@@ -299,22 +320,21 @@ Future<void> showTipOfTheDay() async {
                           amount: "₹ ${totalIncome.toStringAsFixed(0)}",
                           icon: Icons.trending_up,
                           iconColor: Colors.green,
-                          amountColor:
-                              const Color.fromARGB(255, 2, 135, 7),
+                          amountColor: const Color.fromARGB(255, 2, 135, 7),
                         ),
                         _statCard(
                           title: "Expenses",
                           amount: "₹ ${totalExpense.toStringAsFixed(0)}",
                           icon: Icons.trending_down,
                           iconColor: Colors.red,
-                          amountColor:
-                              const Color.fromARGB(255, 194, 21, 9),
+                          amountColor: const Color.fromARGB(255, 194, 21, 9),
                         ),
                       ],
                     ),
 
                     const SizedBox(height: 20),
 
+                    // ------------------- Quick Actions -------------------
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
@@ -345,8 +365,7 @@ Future<void> showTipOfTheDay() async {
                               _quickActionButton(
                                 icon: Icons.remove_circle_outline,
                                 label: "Add Expense",
-                                color:
-                                    const Color.fromARGB(255, 194, 21, 9),
+                                color: const Color.fromARGB(255, 194, 21, 9),
                                 onPressed: () async {
                                   final result = await Navigator.push(
                                     context,
@@ -363,8 +382,7 @@ Future<void> showTipOfTheDay() async {
                               _quickActionButton(
                                 icon: Icons.add_circle_outline,
                                 label: "Add Income",
-                                color:
-                                    const Color.fromARGB(255, 2, 135, 7),
+                                color: const Color.fromARGB(255, 2, 135, 7),
                                 onPressed: () async {
                                   final result = await Navigator.push(
                                     context,
@@ -378,13 +396,12 @@ Future<void> showTipOfTheDay() async {
                                   }
                                 },
                               ),
-                              _quickActionButton(
-                                icon: Icons.flag_outlined,
-                                label: "Set Goal",
-                                color:
-                                    const Color.fromARGB(255, 1, 66, 120),
-                                onPressed: () {},
-                              ),
+                              //_quickActionButton(
+                               // icon: Icons.flag_outlined,
+                               // label: "Set Goal",
+                               // color: const Color.fromARGB(255, 1, 66, 120),
+                               // onPressed: () {},
+                              //),
                             ],
                           ),
                         ],
@@ -393,234 +410,239 @@ Future<void> showTipOfTheDay() async {
 
                     const SizedBox(height: 20),
 
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(12),
-                              boxShadow: const [
-                                BoxShadow(
-                                  color: Colors.black12,
-                                  blurRadius: 6,
-                                  offset: Offset(0, 3),
-                                )
-                              ],
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  "Spending Breakdown",
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF083549),
-                                  ),
-                                ),
-                                const SizedBox(height: 12),
-                                SizedBox(
-  height: 230,
-  child: PieChart(
-    PieChartData(
-      centerSpaceRadius: 0, // 🍕 pizza style
-      sectionsSpace: 2,
-      pieTouchData: PieTouchData(
-        touchCallback: (event, response) {
-          setState(() {
-            if (!event.isInterestedForInteractions ||
-                response == null ||
-                response.touchedSection == null) {
-              touchedPieIndex = -1;
-            } else {
-              touchedPieIndex =
-                  response.touchedSection!.touchedSectionIndex;
-            }
-          });
-        },
-      ),
-      sections: getCategoryTotals().isEmpty
-          ? [
-              PieChartSectionData(
-                value: 1,
-                title: 'No Data',
-                color: Colors.grey,
-              )
-            ]
-          : List.generate(
-              getCategoryTotals().length,
-              (index) {
-                final entry =
-                    getCategoryTotals().entries.elementAt(index);
-                final total = getCategoryTotals()
-                    .values
-                    .fold(0.0, (a, b) => a + b);
-                final percent =
-                    total == 0 ? 0 : (entry.value / total) * 100;
-                final isTouched = index == touchedPieIndex;
+                    // ------------------- Intro Card (NEW USER) -------------------
+                    if (!hasIncome)
+                      _introCard(),
 
-                return PieChartSectionData(
-                  value: entry.value,
-                  radius: isTouched ? 110 : 95,
-                  color: categoryColors[entry.key] ??
-                      Colors.primaries[index % Colors.primaries.length],
-                  title: isTouched
-                      ? "${entry.key}\n${percent.toStringAsFixed(1)}%"
-                      : "",
-                  titleStyle: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
-                );
-              },
-            ),
-    ),
-  ),
-),
-
-                                
-                                 ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Flexible(
-                          child: Container(
-                            height: 300,
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(12),
-                              boxShadow: const [
-                                BoxShadow(
-                                  color: Colors.black12,
-                                  blurRadius: 6,
-                                  offset: Offset(0, 3),
-                                )
-                              ],
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  "Income vs Expenses",
-                                  style: TextStyle(
+                    // ------------------- Spending Breakdown & Income vs Expense -------------------
+                    if (hasExpense) ...[
+                      const SizedBox(height: 20),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(12),
+                                boxShadow: const [
+                                  BoxShadow(
+                                    color: Colors.black12,
+                                    blurRadius: 6,
+                                    offset: Offset(0, 3),
+                                  )
+                                ],
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    "Spending Breakdown",
+                                    style: TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.bold,
-                                      color: Color(0xFF083549)),
-                                ),
-                                const SizedBox(height: 12),
-                                Expanded(
-                                  child: SingleChildScrollView(
-                                    scrollDirection: Axis.horizontal,
-                                    child: SizedBox(
-                                      width: 900,
-                                      child: BarChart(
-                                        BarChartData(
-                                          maxY: getMaxY(),
-                                          barGroups:
-                                              getMonthlyBarGroups(),
-                                          gridData:
-                                              FlGridData(show: false),
-                                          borderData:
-                                              FlBorderData(show: false),
-                                          titlesData: FlTitlesData(
-                                            leftTitles: AxisTitles(
-                                              sideTitles: SideTitles(
-                                                showTitles: true,
-                                                reservedSize: 50,
-                                                interval: getMaxY() / 5,
+                                      color: Color(0xFF083549),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  SizedBox(
+                                    height: 230,
+                                    child: PieChart(
+                                      PieChartData(
+                                        centerSpaceRadius: 0,
+                                        sectionsSpace: 2,
+                                        pieTouchData: PieTouchData(
+                                          touchCallback: (event, response) {
+                                            setState(() {
+                                              if (!event.isInterestedForInteractions ||
+                                                  response == null ||
+                                                  response.touchedSection ==
+                                                      null) {
+                                                touchedPieIndex = -1;
+                                              } else {
+                                                touchedPieIndex =
+                                                    response.touchedSection!
+                                                        .touchedSectionIndex;
+                                              }
+                                            });
+                                          },
+                                        ),
+                                        sections: getCategoryTotals().isEmpty
+                                            ? [
+                                                PieChartSectionData(
+                                                  value: 1,
+                                                  title: 'No Data',
+                                                  color: Colors.grey,
+                                                )
+                                              ]
+                                            : List.generate(
+                                                getCategoryTotals().length,
+                                                (index) {
+                                                  final entry = getCategoryTotals()
+                                                      .entries
+                                                      .elementAt(index);
+                                                  final total = getCategoryTotals()
+                                                      .values
+                                                      .fold(0.0, (a, b) => a + b);
+                                                  final percent =
+                                                      total == 0 ? 0 : (entry.value / total) * 100;
+                                                  final isTouched =
+                                                      index == touchedPieIndex;
+
+                                                  return PieChartSectionData(
+                                                    value: entry.value,
+                                                    radius: isTouched ? 110 : 95,
+                                                    color: categoryColors[entry.key] ??
+                                                        Colors.primaries[index %
+                                                            Colors.primaries.length],
+                                                    title: isTouched
+                                                        ? "${entry.key}\n${percent.toStringAsFixed(1)}%"
+                                                        : "",
+                                                    titleStyle: const TextStyle(
+                                                      color: Colors.white,
+                                                      fontWeight: FontWeight.bold,
+                                                      fontSize: 14,
+                                                    ),
+                                                  );
+                                                },
+                                              ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Flexible(
+                            child: Container(
+                              height: 300,
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(12),
+                                boxShadow: const [
+                                  BoxShadow(
+                                    color: Colors.black12,
+                                    blurRadius: 6,
+                                    offset: Offset(0, 3),
+                                  )
+                                ],
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    "Income vs Expenses",
+                                    style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF083549)),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Expanded(
+                                    child: SingleChildScrollView(
+                                      scrollDirection: Axis.horizontal,
+                                      child: SizedBox(
+                                        width: 900,
+                                        child: BarChart(
+                                          BarChartData(
+                                            maxY: getMaxY(),
+                                            barGroups: getMonthlyBarGroups(),
+                                            gridData: FlGridData(show: false),
+                                            borderData: FlBorderData(show: false),
+                                            titlesData: FlTitlesData(
+                                              leftTitles: AxisTitles(
+                                                sideTitles: SideTitles(
+                                                  showTitles: true,
+                                                  reservedSize: 50,
+                                                  interval: getMaxY() / 5,
+                                                ),
+                                              ),
+                                              bottomTitles: AxisTitles(
+                                                sideTitles: SideTitles(
+                                                  showTitles: true,
+                                                  reservedSize: 40,
+                                                  getTitlesWidget: (value, meta) {
+                                                    const months = [
+                                                      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                                                      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+                                                    ];
+                                                    final index = value.toInt() - 1;
+                                                    if (index < 0 || index > 11) return const SizedBox();
+                                                    return Text(
+                                                      months[index],
+                                                      style: const TextStyle(fontSize: 11),
+                                                    );
+                                                  },
+                                                ),
                                               ),
                                             ),
-                                            bottomTitles: AxisTitles(
-  sideTitles: SideTitles(
-    showTitles: true,
-    reservedSize: 40,
-    getTitlesWidget: (value, meta) {
-      const months = [
-        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-      ];
-
-      final index = value.toInt() - 1;
-      if (index < 0 || index > 11) return const SizedBox();
-
-      return Text(
-        months[index],
-        style: const TextStyle(fontSize: 11),
-      );
-    },
-  ),
-),
-
                                           ),
                                         ),
                                       ),
                                     ),
                                   ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 20),
-
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      height: 260,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        boxShadow: const [
-                          BoxShadow(
-                            color: Colors.black12,
-                            blurRadius: 6,
-                            offset: Offset(0, 3),
-                          )
-                        ],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            "Recent Activities",
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF083549),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Expanded(
-                            child: SingleChildScrollView(
-                              child: Column(
-                                children: recentTransactions.map((tx) {
-                                  final isExpense =
-                                      tx['type'] == 'expense';
-                                  final amount = tx['amount'];
-                                  final title = tx['category'];
-                                  final date =
-                                      (tx['date'] as Timestamp).toDate();
-
-                                  return _activityItem(
-                                    title,
-                                    "${isExpense ? '-' : '+'} ₹$amount",
-                                    "${date.day}/${date.month}/${date.year}",
-                                  );
-                                }).toList(),
+                                ],
                               ),
                             ),
                           ),
                         ],
                       ),
-                    ),
+                    ],
+
+                    // ------------------- Recent Activities -------------------
+                    if (hasIncome) ...[
+                      const SizedBox(height: 20),
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        height: 260,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Colors.black12,
+                              blurRadius: 6,
+                              offset: Offset(0, 3),
+                            )
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              "Recent Activities",
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF083549),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Expanded(
+                              child: SingleChildScrollView(
+                                child: Column(
+                                  children: recentTransactions.map((tx) {
+                                    final isExpense = tx['type'] == 'expense';
+                                    final amount = tx['amount'];
+                                    final title = tx['category'];
+                                    final date = (tx['date'] as Timestamp).toDate();
+
+                                    return _activityItem(
+                                      title,
+                                      "${isExpense ? '-' : '+'} ₹$amount",
+                                      "${date.day}/${date.month}/${date.year}",
+                                    );
+                                  }).toList(),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -631,30 +653,44 @@ Future<void> showTipOfTheDay() async {
     );
   }
 
-  Widget _quickActionButton({
-    required IconData icon,
-    required String label,
-    required Color color,
-    required VoidCallback onPressed,
-  }) {
-    return Expanded(
-      child: Container(
-        margin: const EdgeInsets.only(right: 12),
-        child: ElevatedButton.icon(
-          onPressed: onPressed,
-          icon: Icon(icon, color: Colors.white),
-          label: Text(label, style: const TextStyle(color: Colors.white)),
-          style: ElevatedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            backgroundColor: color,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+  // ------------------- Intro Card Widget -------------------
+  Widget _introCard() {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 20),
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.blue.shade50,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Icon(Icons.auto_graph, size: 60, color: Colors.blue.shade300),
+          const SizedBox(height: 16),
+          const Text(
+            "Welcome to FinTracker!",
+            style: TextStyle(
+                fontSize: 20, fontWeight: FontWeight.bold, color: Colors.blue),
           ),
-        ),
+          const SizedBox(height: 8),
+          const Text(
+            "Add your first income to start tracking your finances.\nThen add expenses to see your spending breakdown.",
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 14, color: Colors.blueGrey),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            "💡 Tip: ${financeTips[Random().nextInt(financeTips.length)]['tip']}",
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 12, color: Colors.blueGrey),
+          ),
+        ],
       ),
     );
   }
 
+  // ------------------- Stat Card -------------------
   Widget _statCard({
     required String title,
     required String amount,
@@ -704,6 +740,32 @@ Future<void> showTipOfTheDay() async {
     );
   }
 
+  // ------------------- Quick Action Button -------------------
+  Widget _quickActionButton({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onPressed,
+  }) {
+    return Expanded(
+      child: Container(
+        margin: const EdgeInsets.only(right: 12),
+        child: ElevatedButton.icon(
+          onPressed: onPressed,
+          icon: Icon(icon, color: Colors.white),
+          label: Text(label, style: const TextStyle(color: Colors.white)),
+          style: ElevatedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            backgroundColor: color,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ------------------- Activity Item -------------------
   Widget _activityItem(String title, String amount, String date) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
@@ -722,8 +784,7 @@ Future<void> showTipOfTheDay() async {
               ),
               Text(
                 date,
-                style:
-                    const TextStyle(fontSize: 12, color: Colors.grey),
+                style: const TextStyle(fontSize: 12, color: Colors.grey),
               ),
             ],
           ),
