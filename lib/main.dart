@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_fintracker/fintracker_budget.dart';
 import 'package:flutter_fintracker/fintracker_expenses.dart';
 import 'package:flutter_fintracker/fintracker_home.dart';
 //import 'fintracker_login.dart'; 
 import 'package:firebase_core/firebase_core.dart'; // Firebase core
 import 'package:flutter_fintracker/fintracker_login.dart';
-import 'firebase_options.dart'; // correct file name
+import 'firebase_options.dart'; 
+import 'package:firebase_auth/firebase_auth.dart';// correct file name
 // import your page widgets
 
 void main() async {
@@ -21,13 +23,35 @@ class FinTrackerApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'FinTracker',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorSchemeSeed: const Color(0xFF083549),
-        useMaterial3: true,
-      ),
-      home: const LoginPage(), // first screen
-    );
+  title: 'FinTracker',
+  debugShowCheckedModeBanner: false,
+  theme: ThemeData(
+    colorSchemeSeed: const Color(0xFF083549),
+    useMaterial3: true,
+  ),
+  routes: {
+    '/login': (_) => const LoginPage(),
+    '/dashboard': (_) => const DashboardScreen(),
+    '/transactions': (_) => const ExpensesPage(),
+    '/budget': (_) => const BudgetPlannerScreen(),
+    '/split': (_) => const Placeholder(),
+  },
+  home: StreamBuilder<User?>(
+    stream: FirebaseAuth.instance.authStateChanges(),
+    builder: (context, snapshot) {
+      if (snapshot.connectionState == ConnectionState.waiting) {
+        return const Scaffold(
+          body: Center(child: CircularProgressIndicator()),
+        );
+      }
+
+      if (snapshot.hasData) {
+        return const DashboardScreen();
+      }
+
+      return const LoginPage();
+    },
+  ),
+);
   }
 }
