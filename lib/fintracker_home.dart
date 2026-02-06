@@ -6,6 +6,31 @@ import 'add_transaction.dart';
 import 'package:flutter_fintracker/fintracker_budget.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'widgets/side_nav.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:math';
+
+final List<Map<String, String>> financeTips = [
+  {
+    "term": "Emergency Fund",
+    "tip": "Save at least 3–6 months of expenses for unexpected situations."
+  },
+  {
+    "term": "50/30/20 Rule",
+    "tip": "50% needs, 30% wants, 20% savings."
+  },
+  {
+    "term": "Compound Interest",
+    "tip": "Money grows faster when interest earns interest."
+  },
+  {
+    "term": "Budget",
+    "tip": "A plan for every rupee gives you control, not restriction."
+  },
+  {
+    "term": "SIP",
+    "tip": "Invest a fixed amount regularly to reduce market risk."
+  },
+];
 
 final Map<String, Color> categoryColors = {
   'Food': const Color.fromARGB(255, 91, 54, 0),
@@ -41,9 +66,42 @@ class _DashboardScreenState extends State<DashboardScreen> {
   List<Map<String, dynamic>> recentTransactions = [];
   List<Map<String, dynamic>> allTransactions = [];
 
+Future<void> showTipOfTheDay() async {
+  final prefs = await SharedPreferences.getInstance();
+  final today = DateTime.now().toIso8601String().split('T').first;
+  final lastShown = prefs.getString('tip_last_shown');
+
+  if (lastShown == today) return;
+
+  final randomTip = financeTips[Random().nextInt(financeTips.length)];
+
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (_) => AlertDialog(
+        title: Text(
+          "💡 ${randomTip['term']}",
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        content: Text(randomTip['tip']!),
+        actions: [
+          TextButton(
+            onPressed: () {Navigator.of(context).pop();},
+            child: const Text("Got it"),
+          ),
+        ],
+      ),
+    );
+  });
+
+  await prefs.setString('tip_last_shown', today);
+}
+
   @override
   void initState() {
     super.initState();
+    showTipOfTheDay();
     fetchDashboardData();
     fetchUserName();
   }
@@ -410,8 +468,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   color: categoryColors[entry.key] ??
                       Colors.primaries[index % Colors.primaries.length],
                   title: isTouched
-                      ? "${percent.toStringAsFixed(1)}%"
-                      : entry.key,
+                      ? "${entry.key}\n${percent.toStringAsFixed(1)}%"
+                      : "",
                   titleStyle: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,

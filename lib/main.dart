@@ -32,7 +32,7 @@ class FinTrackerApp extends StatelessWidget {
   routes: {
     '/login': (_) => const LoginPage(),
     '/dashboard': (_) => const DashboardScreen(),
-    '/transactions': (_) => const ExpensesPage(),
+    //'/transactions': (_) => const ExpensesPage(),
     '/budget': (_) => const BudgetPlannerScreen(),
     '/split': (_) => const Placeholder(),
   },

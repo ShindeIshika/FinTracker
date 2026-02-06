@@ -51,33 +51,52 @@ class _AddTransactionPageState extends State<AddTransactionPage> {
     return;
   }
 
+  final double amount = double.parse(_amountController.text);
+
   try {
+    // 1️⃣ Save transaction
     await _firestore.collection('transactions').add({
       'uid': user.uid,
       'type': widget.type, // 'income' or 'expense'
-      'amount': double.parse(_amountController.text),
+      'amount': amount,
       'category': _selectedCategory,
       'account': _selectedAccount,
       'date': Timestamp.fromDate(_selectedDate),
       'createdAt': FieldValue.serverTimestamp(),
     });
 
-    // SUCCESS MESSAGE (optional but very useful)
+    // 2️⃣ Update budget ONLY if EXPENSE
+    if (widget.type == 'expense') {
+      final budgetQuery = await _firestore
+          .collection('budgets')
+          .where('uid', isEqualTo: user.uid)
+          .where('category', isEqualTo: _selectedCategory)
+          .limit(1)
+          .get();
+
+      if (budgetQuery.docs.isNotEmpty) {
+        final budgetDoc = budgetQuery.docs.first;
+
+        await _firestore
+            .collection('budgets')
+            .doc(budgetDoc.id)
+            .update({
+          'spent': FieldValue.increment(amount),
+        });
+      }
+    }
+
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text("Transaction added successfully")),
     );
 
-    // GO BACK TO DASHBOARD WITH RESULT = true
     Navigator.pop(context, true);
-
   } catch (e) {
-    // IF ANY ERROR HAPPENS, YOU WILL SEE IT NOW
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text("Error: $e")),
     );
   }
 }
-
 
   void _addNewCategory() {
     showDialog(
