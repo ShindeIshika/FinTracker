@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_fintracker/fintracker_bills.dart';
 import 'package:flutter_fintracker/fintracker_budget.dart';
-import 'package:flutter_fintracker/fintracker_expenses.dart';
 import 'package:flutter_fintracker/fintracker_home.dart';
 //import 'fintracker_login.dart'; 
 import 'package:firebase_core/firebase_core.dart'; // Firebase core
 import 'package:flutter_fintracker/fintracker_login.dart';
 import 'package:flutter_fintracker/fintracker_splitbill.dart';
+import 'package:flutter_fintracker/fintracker_transaction.dart';
 import 'firebase_options.dart'; 
 import 'package:firebase_auth/firebase_auth.dart';// correct file name
 // import your page widgets
@@ -33,9 +34,10 @@ class FinTrackerApp extends StatelessWidget {
   routes: {
     '/login': (_) => const LoginPage(),
     '/dashboard': (_) => const DashboardScreen(),
-    //'/transactions': (_) => const ExpensesPage(),
+    '/transactions': (_) => const TransactionsPage(),
     '/budget': (_) => const BudgetPlannerScreen(),
     '/split': (_) => const SplitBillsScreen(),
+    '/bills': (_)=> const BillsPage(),
   },
   home: StreamBuilder<User?>(
     stream: FirebaseAuth.instance.authStateChanges(),

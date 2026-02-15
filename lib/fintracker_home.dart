@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter_fintracker/fintracker_bills.dart';
 import 'package:flutter_fintracker/fintracker_login.dart';
 import 'package:flutter_fintracker/fintracker_splitbill.dart';
 import 'package:flutter_fintracker/add_transaction.dart';
 import 'package:flutter_fintracker/fintracker_budget.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:flutter_fintracker/fintracker_transaction.dart';
 import 'widgets/side_nav.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:math';
+import 'previous_tips.dart';
+import 'recurring_payments.dart';
 
 final List<Map<String, String>> financeTips = [
   {
@@ -53,6 +57,7 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  bool _tipShown = false;
 
   int selectedNavIndex = 0;
   int touchedPieIndex = -1;
@@ -68,39 +73,58 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool hasIncome = false;
   bool hasExpense = false;
 
-  Future<void> showTipOfTheDay() async {
-    final prefs = await SharedPreferences.getInstance();
-    final today = DateTime.now().toIso8601String().split('T').first;
-    final lastShown = prefs.getString('tip_last_shown');
+  
 
-    if (lastShown == today) return;
+ Future<void> showTipOfTheDay() async {
 
-    final randomTip = financeTips[Random().nextInt(financeTips.length)];
+  if (_tipShown) return;
+  _tipShown = true;
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      showDialog(
-        context: context,
-        barrierDismissible: true,
-        builder: (_) => AlertDialog(
-          title: Text(
-            "💡 ${randomTip['term']}",
-            style: const TextStyle(fontWeight: FontWeight.bold),
-          ),
-          content: Text(randomTip['tip']!),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: const Text("Got it"),
-            ),
-          ],
+  final prefs = await SharedPreferences.getInstance();
+  final today = DateTime.now().toIso8601String().split('T').first;
+  final lastShown = prefs.getString('tip_last_shown');
+
+  if (lastShown == today) return;
+
+final dayIndex = DateTime.now().difference(DateTime(2024)).inDays;
+final tipIndex = dayIndex % financeTips.length;
+final randomTip = financeTips[tipIndex];
+
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (_) => AlertDialog(
+        title: Text(
+          "💡 ${randomTip['term']}",
+          style: const TextStyle(fontWeight: FontWeight.bold),
         ),
-      );
-    });
+        content: Text(randomTip['tip']!),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              // <-- Save the date only when user clicks "Got it"
+              await prefs.setString('tip_last_shown', today);
+              Navigator.of(context).pop();
+            },
+            child: const Text("Got it"),
+            
+          ),
+        ],
+      ),
+    );
+  });
+  List<String> history = prefs.getStringList('tip_history') ?? [];
 
-    await prefs.setString('tip_last_shown', today);
-  }
+String entry =
+    "$today|${randomTip['term']}|${randomTip['tip']}";
+
+if (!history.contains(entry)) {
+  history.add(entry);
+  await prefs.setStringList('tip_history', history);
+}
+
+}
 
   @override
   void initState() {
@@ -108,7 +132,59 @@ class _DashboardScreenState extends State<DashboardScreen> {
     showTipOfTheDay();
     fetchDashboardData();
     fetchUserName();
+    _generateRecurringTransactions();
+
   }
+
+  Future<void> _generateRecurringTransactions() async {
+  final user = FirebaseAuth.instance.currentUser;
+  if (user == null) return;
+
+  final today = DateTime.now();
+  final todayWeekday = today.weekday; // 1 = Mon, 7 = Sun
+
+  final recurringSnapshot = await FirebaseFirestore.instance
+      .collection('recurring_payments')
+      .where('uid', isEqualTo: user.uid)
+      .where('isActive', isEqualTo: true)
+      .get();
+
+  for (var doc in recurringSnapshot.docs) {
+    final data = doc.data();
+    final List days = data['daysOfWeek'] ?? [];
+
+    if (!days.contains(todayWeekday)) continue;
+
+    final lastGenerated = data['lastGeneratedDate'] != null
+        ? (data['lastGeneratedDate'] as Timestamp).toDate()
+        : null;
+
+    final alreadyGeneratedToday = lastGenerated != null &&
+        lastGenerated.year == today.year &&
+        lastGenerated.month == today.month &&
+        lastGenerated.day == today.day;
+
+    if (alreadyGeneratedToday) continue;
+
+    // Create transaction
+    await FirebaseFirestore.instance.collection('transactions').add({
+      'uid': user.uid,
+      'type': data['type'],
+      'amount': data['amount'],
+      'category': data['category'],
+      'account': data['account'],
+      'date': Timestamp.fromDate(today),
+      'createdAt': FieldValue.serverTimestamp(),
+      'isAutoGenerated': true,
+    });
+
+    // Update lastGeneratedDate
+    await doc.reference.update({
+      'lastGeneratedDate': Timestamp.fromDate(today),
+    });
+  }
+}
+
 
   void handleNavTap(int index) {
   if (index == selectedNavIndex) return;
@@ -122,7 +198,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       // Already on dashboard, do nothing
       break;
     case 1: // Transactions
-      // Navigate to transactions page if exists
+      Navigator.push(context, 
+      MaterialPageRoute(builder: (_) => const TransactionsPage()),
+      );
       break;
     case 2: // Budget
       Navigator.pushReplacement(
@@ -139,6 +217,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         MaterialPageRoute(builder: (_) => const SplitBillsScreen()),
       );
       break;
+    case 5:
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => const BillsPage()),
+    );
   }
   }
 
@@ -174,14 +257,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
       } else if (data['type'] == 'expense') {
         expense += (data['amount'] as num).toDouble();
       }
-      tempList.add(data);
+      if (data['date'] != null && data['date'] is Timestamp) {
+  tempList.add(data);
+}
     }
 
-    tempList.sort((a, b) {
-      final aDate = (a['date'] as Timestamp).toDate();
-      final bDate = (b['date'] as Timestamp).toDate();
-      return bDate.compareTo(aDate);
-    });
+  tempList.sort((a, b) {
+  final aDate = a['date'] as Timestamp;
+  final bDate = b['date'] as Timestamp;
+  return bDate.compareTo(aDate);
+});
 
     setState(() {
       totalIncome = income;
@@ -271,40 +356,81 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               child: SingleChildScrollView(
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          "Dashboard",
-                          style: TextStyle(
-                            fontSize: 24,
-                            color: Color(0xFF083549),
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.logout),
-                          onPressed: () async {
-                            await FirebaseAuth.instance.signOut();
-                            Navigator.pushReplacement(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const LoginPage(),
-                              ),
-                            );
-                          },
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      "Welcome, $firstName",
-                      style:
-                          const TextStyle(fontSize: 16, color: Colors.blueGrey),
-                    ),
-                    const SizedBox(height: 20),
+  crossAxisAlignment: CrossAxisAlignment.start,
+  children: [
+
+    Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+
+        const Text(
+          "Dashboard",
+          style: TextStyle(
+            fontSize: 24,
+            color: Color(0xFF083549),
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+
+        Row(
+          children: [
+
+            IconButton(
+  icon: const Icon(Icons.repeat),
+  tooltip: "Recurring Payments",
+  onPressed: () {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const RecurringPaymentsPage(),
+      ),
+    );
+  },
+),
+
+            GestureDetector(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const TipsPage(),
+                  ),
+                );
+              },
+              child: const Text(
+                "💡",
+                style: TextStyle(fontSize: 26),
+              ),
+            ),
+
+            const SizedBox(width: 10),
+
+            IconButton(
+              icon: const Icon(Icons.logout),
+              onPressed: () async {
+                await FirebaseAuth.instance.signOut();
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (_) => const LoginPage()),
+                );
+              },
+            ),
+          ],
+        ),
+      ],
+    ),
+
+    const SizedBox(height: 6),
+
+    Text(
+      "Welcome, $firstName",
+      style: const TextStyle(
+        fontSize: 16,
+        color: Colors.blueGrey,
+      ),
+    ),
+
+    const SizedBox(height: 20),
 
                     // ------------------- Stat Cards -------------------
                     Row(

@@ -29,6 +29,12 @@ class _AddTransactionPageState extends State<AddTransactionPage> {
   final _formKey = GlobalKey<FormState>();
   final _amountController = TextEditingController();
   final _newCategoryController = TextEditingController();
+  
+
+  bool _isRecurring = false;
+String _repeatType = 'weekly'; // daily / weekly / custom
+List<int> _selectedDays = [];
+
 
   String _selectedCategory = '';
   String _selectedAccount = 'Cash';
@@ -38,7 +44,7 @@ class _AddTransactionPageState extends State<AddTransactionPage> {
   List<String> incomeCategories = ['Salary', 'Bonus', 'Interest', 'Other'];
   List<String> expenseCategories = ['Food', 'Travel', 'Shopping', 'Bills', 'General'];
 
-  final List<String> accounts = ['Cash', 'Bank', 'GPay'];
+  final List<String> accounts = ['Cash', 'Bank', 'UPI'];
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -66,44 +72,70 @@ class _AddTransactionPageState extends State<AddTransactionPage> {
     }
 
     if (!_formKey.currentState!.validate()) return;
+    if (_isRecurring && _selectedDays.isEmpty) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(content: Text("Please select at least one day")),
+  );
+  return;
+}
+
 
     final double amount = double.parse(_amountController.text);
-
     try {
-      // 1️⃣ Save transaction
-      await _firestore.collection('transactions').add({
-        'uid': user.uid,
-        'type': widget.type,
-        'amount': amount,
-        'category': _selectedCategory,
-        'account': _selectedAccount,
-        'date': Timestamp.fromDate(_selectedDate),
-        'createdAt': FieldValue.serverTimestamp(),
+  // 1️⃣ Always save main transaction
+  final transactionRef = await _firestore.collection('transactions').add({
+    'uid': user.uid,
+    'type': widget.type,
+    'amount': amount,
+    'category': _selectedCategory,
+    'account': _selectedAccount,
+    'date': Timestamp.fromDate(_selectedDate),
+    'createdAt': FieldValue.serverTimestamp(),
+  });
+
+  // 2️⃣ If recurring is ON → also save recurring rule
+  if (_isRecurring) {
+    await _firestore.collection('recurring_payments').add({
+      'uid': user.uid,
+      'transactionId': transactionRef.id,
+      'type': widget.type,
+      'amount': amount,
+      'category': _selectedCategory,
+      'account': _selectedAccount,
+      'startDate': Timestamp.fromDate(_selectedDate),
+      'repeatType': _repeatType,
+      'days': _selectedDays,
+      'isActive': true,
+      'lastGenerated': null,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  // 3️⃣ Budget logic (UNCHANGED)
+  if (widget.type == 'expense') {
+    final budgetQuery = await _firestore
+        .collection('budgets')
+        .where('uid', isEqualTo: user.uid)
+        .where('category', isEqualTo: _selectedCategory)
+        .limit(1)
+        .get();
+
+    if (budgetQuery.docs.isNotEmpty) {
+      final budgetDoc = budgetQuery.docs.first;
+      await _firestore.collection('budgets').doc(budgetDoc.id).update({
+        'spent': FieldValue.increment(amount),
       });
+    }
+  }
 
-      // 2️⃣ Update budget ONLY if EXPENSE
-      if (widget.type == 'expense') {
-        final budgetQuery = await _firestore
-            .collection('budgets')
-            .where('uid', isEqualTo: user.uid)
-            .where('category', isEqualTo: _selectedCategory)
-            .limit(1)
-            .get();
+  ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(content: Text("Transaction added successfully")),
+  );
 
-        if (budgetQuery.docs.isNotEmpty) {
-          final budgetDoc = budgetQuery.docs.first;
-          await _firestore.collection('budgets').doc(budgetDoc.id).update({
-            'spent': FieldValue.increment(amount),
-          });
-        }
-      }
+  Navigator.pop(context, true);
+}
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Transaction added successfully")),
-      );
-
-      Navigator.pop(context, true);
-    } catch (e) {
+    catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Error: $e")),
       );
@@ -267,6 +299,62 @@ class _AddTransactionPageState extends State<AddTransactionPage> {
                   });
                 },
               ),
+
+             const SizedBox(height: 20),
+
+SwitchListTile(
+  title: const Text(
+    "Make Payment Recurring?",
+    style: TextStyle(fontWeight: FontWeight.bold),
+  ),
+  value: _isRecurring,
+  activeThumbColor: accentRed,
+  activeTrackColor: accentRed.withValues(alpha: 0.5),
+
+  onChanged: (value) {
+    setState(() {
+      _isRecurring = value;
+    });
+  },
+),
+
+if (_isRecurring) ...[
+  const SizedBox(height: 10),
+  const Text(
+    "Repeat On",
+    style: TextStyle(fontWeight: FontWeight.bold),
+  ),
+  const SizedBox(height: 10),
+
+  Wrap(
+    spacing: 8,
+    children: List.generate(7, (index) {
+      final dayNumber = index + 1;
+      final dayName = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][index];
+      final isSelected = _selectedDays.contains(dayNumber);
+
+      return ChoiceChip(
+        label: Text(dayName),
+        selected: isSelected,
+        selectedColor: accentRed,
+        onSelected: (selected) {
+          setState(() {
+            if (selected) {
+              _selectedDays.add(dayNumber);
+            } else {
+              _selectedDays.remove(dayNumber);
+            }
+          });
+        },
+      );
+    }),
+  ),
+],
+
+const SizedBox(height: 20),
+
+
+
 
               const SizedBox(height: 20),
 

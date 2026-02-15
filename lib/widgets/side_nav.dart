@@ -25,6 +25,7 @@ class _SideNavState extends State<SideNav> {
       {'icon': Icons.pie_chart, 'label': 'Budget'},
       {'icon': Icons.savings, 'label': 'Savings'},
       {'icon': Icons.group, 'label': 'SplitTheBill'},
+      {'icon': Icons.receipt,'label':'Bills And Reminders'},
     ];
 
     return Container(

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'widgets/side_nav.dart';
+import'package:flutter_fintracker/fintracker_bills.dart';
 
 String formatCategory(String text) {
   if (text.isEmpty) return text;
@@ -415,9 +416,17 @@ final categories = categoryController.text.trim().toLowerCase();
     if (index == 0) {
       Navigator.pushReplacementNamed(context, '/dashboard');
     } else if (index == 1) {
-      //Navigator.pushReplacementNamed(context, '/transactions');
+      Navigator.pushReplacementNamed(context, '/transactions');
     } else if (index == 3) {
       Navigator.pushReplacementNamed(context, '/profile');
+    }
+    else if(index==4){
+      Navigator.pushReplacementNamed(context, '/split');
+    }
+    else if(index==5){
+      Navigator.pushReplacement(context, 
+      MaterialPageRoute(builder: (_)=> const BillsPage()),
+      );
     }
   }
 }
