@@ -6,6 +6,7 @@ import 'package:flutter_fintracker/fintracker_splitbill.dart';
 import 'package:flutter_fintracker/fintracker_budget.dart';
 import 'package:flutter_fintracker/fintracker_home.dart';
 import 'package:flutter_fintracker/fintracker_transaction.dart';
+import 'add_bills.dart';
 
 class BillsPage extends StatefulWidget {
   const BillsPage({super.key});
@@ -17,13 +18,15 @@ class BillsPage extends StatefulWidget {
 class _BillsPageState extends State<BillsPage> {
   final user = FirebaseAuth.instance.currentUser;
   int selectedNavIndex = 5;
+  bool _alertShown = false;
 
-  // 🎨 Your Premium Colors
+
   static const Color bgColor = Color(0xFFF1F5F9);
   static const Color primary = Color.fromARGB(255, 38, 15, 42);
   static const Color accent = Color.fromARGB(255, 13, 15, 104);
   static const Color danger = Color.fromARGB(255, 200, 31, 31);
   static const Color success = Color.fromARGB(255, 10, 104, 16);
+  static const Color warning = Color.fromARGB(255, 183, 103, 12);
 
   @override
   Widget build(BuildContext context) {
@@ -37,9 +40,9 @@ class _BillsPageState extends State<BillsPage> {
             onItemTap: handleNavTap,
           ),
 
-          /// MAIN CONTENT
+          /// ================= MAIN CONTENT =================
           Expanded(
-            child: StreamBuilder(
+            child: StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('bills')
                   .where('uid', isEqualTo: user!.uid)
@@ -49,25 +52,73 @@ class _BillsPageState extends State<BillsPage> {
                   return const Center(
                       child: CircularProgressIndicator());
                 }
+                
 
-                final docs = snapshot.data!.docs;
+                /// 🔥 SORT BY NEXT DUE DATE
+                final docs = snapshot.data!.docs.toList()
+                  ..sort((a, b) {
+                    final aDue =
+                        (a['nextDueDate'] as Timestamp).toDate();
+                    final bDue =
+                        (b['nextDueDate'] as Timestamp).toDate();
+                    return aDue.compareTo(bDue);
+                  });
+
                 final now = DateTime.now();
+int upcoming = 0;
+int overdue = 0;
 
-                int upcoming = 0;
-                int overdue = 0;
-                int pending = docs.length;
+for (var doc in docs) {
+  final data = doc.data() as Map<String, dynamic>;
+  final due =
+      (data['nextDueDate'] as Timestamp).toDate();
+
+  final diff =
+      due.difference(now).inDays;
+
+  if (diff < 0) {
+    overdue++;
+  } else if (diff <= 3) {
+    upcoming++;
+  }
+}
+
+                int total = docs.length;
+
+                List<String> alerts = [];
 
                 for (var doc in docs) {
-                  int dueDay = doc['dueDate'];
-                  DateTime dueDate =
-                      DateTime(now.year, now.month, dueDay);
+  final data =
+      doc.data() as Map<String, dynamic>;
 
-                  if (dueDate.isBefore(now)) {
-                    overdue++;
-                  } else {
-                    upcoming++;
-                  }
-                }
+  final due =
+      (data['nextDueDate'] as Timestamp).toDate();
+
+  final diff =
+      due.difference(DateTime.now()).inDays;
+
+  if (diff < 0) {
+    alerts.add("${data['name']} is OVERDUE!");
+  } else if (diff <= 3) {
+    alerts.add(
+        "${data['name']} is due in $diff day(s)");
+  }
+}
+if (alerts.isNotEmpty && !_alertShown) {
+  _alertShown = true;
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(alerts.first),
+        backgroundColor: danger,
+        duration: const Duration(seconds: 4),
+      ),
+    );
+  });
+}
+
+
 
                 return Padding(
                   padding: const EdgeInsets.all(28),
@@ -76,74 +127,143 @@ class _BillsPageState extends State<BillsPage> {
                       crossAxisAlignment:
                           CrossAxisAlignment.start,
                       children: [
-                        /// HEADER
+
+                        /// ================= HEADER =================
                         Row(
                           mainAxisAlignment:
                               MainAxisAlignment.spaceBetween,
                           children: [
-                            Column(
+                            const Column(
                               crossAxisAlignment:
                                   CrossAxisAlignment.start,
-                              children: const [
+                              children: [
                                 Text(
                                   "Bills & Reminders",
                                   style: TextStyle(
                                     fontSize: 28,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF083549),
+                                    fontWeight:
+                                        FontWeight.bold,
+                                    color:
+                                        Color(0xFF083549),
                                   ),
                                 ),
                                 SizedBox(height: 6),
                                 Text(
-                                  "Manage your bills and payment reminders",
+                                  "Manage your recurring payments",
                                   style: TextStyle(
-                                      color: Colors.grey),
+                                      color:
+                                          Colors.grey),
                                 )
                               ],
                             ),
                             Row(
                               children: [
                                 ElevatedButton(
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: accent,
+                                  style:
+                                      ElevatedButton
+                                          .styleFrom(
+                                    backgroundColor:
+                                        accent,
+                                    padding:
+                                        const EdgeInsets
+                                            .all(14),
                                     shape:
                                         RoundedRectangleBorder(
                                       borderRadius:
-                                          BorderRadius.circular(
-                                              14),
+                                          BorderRadius
+                                              .circular(
+                                                  14),
                                     ),
-                                    padding:
-                                        const EdgeInsets.all(
-                                            14),
                                   ),
-                                  onPressed: () {},
-                                  child: const Icon(Icons.add,
-                                      color: Colors.white),
+                                  onPressed: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) =>
+                                            const AddEditBillPage(),
+                                      ),
+                                    );
+                                  },
+                                  child: const Icon(
+                                      Icons.add,
+                                      color:
+                                          Colors.white),
                                 ),
-                                const SizedBox(width: 12),
+                                const SizedBox(
+                                    width: 12),
                                 IconButton(
-                                  onPressed: () async {
+                                  icon: const Icon(
+                                      Icons.logout,
+                                      color:
+                                          primary),
+                                  onPressed:
+                                      () async {
                                     await FirebaseAuth
                                         .instance
                                         .signOut();
                                     Navigator.pushReplacementNamed(
-                                        context, '/login');
+                                        context,
+                                        '/login');
                                   },
-                                  icon: const Icon(Icons.logout,
-                                      color: primary),
-                                )
+                                ),
                               ],
                             )
                           ],
                         ),
 
-                        const SizedBox(height: 32),
+                        const SizedBox(height: 20),
 
-                        /// PREMIUM STAT CARDS
+                        /// ================= ALERTS =================
+                        if (alerts.isNotEmpty)
+                          Column(
+                            children: alerts
+                                .map((alert) =>
+                                    Container(
+                                      margin:
+                                          const EdgeInsets
+                                              .only(
+                                                  bottom:
+                                                      10),
+                                      padding:
+                                          const EdgeInsets
+                                              .all(14),
+                                      decoration:
+                                          BoxDecoration(
+                                        color: Colors
+                                            .red
+                                            .shade50,
+                                        borderRadius:
+                                            BorderRadius
+                                                .circular(
+                                                    12),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          const Icon(
+                                              Icons
+                                                  .warning,
+                                              color: Colors
+                                                  .red),
+                                          const SizedBox(
+                                              width:
+                                                  10),
+                                          Expanded(
+                                              child:
+                                                  Text(
+                                                      alert)),
+                                        ],
+                                      ),
+                                    ))
+                                .toList(),
+                          ),
+
+                        const SizedBox(height: 30),
+
+                        /// ================= STAT CARDS =================
                         Row(
                           children: [
                             _buildStatCard(
-                                "Total Upcoming",
+                                "Upcoming",
                                 upcoming.toString(),
                                 accent),
                             const SizedBox(width: 18),
@@ -153,25 +273,40 @@ class _BillsPageState extends State<BillsPage> {
                                 danger),
                             const SizedBox(width: 18),
                             _buildStatCard(
-                                "Pending",
-                                pending.toString(),
+                                "Total Bills",
+                                total.toString(),
                                 primary),
                           ],
                         ),
 
-                        const SizedBox(height: 42),
+                        const SizedBox(height: 40),
 
                         const Text(
                           "Your Bills",
                           style: TextStyle(
                               fontSize: 20,
-                              fontWeight: FontWeight.bold),
+                              fontWeight:
+                                  FontWeight.bold),
                         ),
 
                         const SizedBox(height: 20),
 
-                        ...docs.map((doc) =>
-                            _buildBillCard(doc)),
+                        if (docs.isEmpty)
+                          const Center(
+                              child: Padding(
+                            padding:
+                                EdgeInsets.all(40),
+                            child: Text(
+                              "No bills added yet",
+                              style: TextStyle(
+                                  color:
+                                      Colors.grey),
+                            ),
+                          )),
+
+                        ...docs.map(
+                            (doc) =>
+                                _buildBillCard(doc)),
                       ],
                     ),
                   ),
@@ -184,72 +319,65 @@ class _BillsPageState extends State<BillsPage> {
     );
   }
 
-   void handleNavTap(int index) {
-  if (index == selectedNavIndex) return;
+  /// ================= NAVIGATION =================
 
-  setState(() {
-    selectedNavIndex = index;
-  });
+  void handleNavTap(int index) {
+    if (index == selectedNavIndex) return;
 
-  switch (index) {
-    case 0: // Dashboard
-      Navigator.pushReplacement(context, 
-      MaterialPageRoute(builder: (_)=> const DashboardScreen()),
-      );
-      break;
-    case 1: // Transactions
-      Navigator.push(context, 
-      MaterialPageRoute(builder: (_) => const TransactionsPage()),
-      );
-      break;
-    case 2: // Budget
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const BudgetPlannerScreen()),
-      );
-      break;
-    case 3: // Savings
-      // Navigate to savings page if exists
-      break;
-    case 4: // Split Bills
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const SplitBillsScreen()),
-      );
-      break;
-    case 5:
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (_) => const BillsPage()),
-    );
+    setState(() {
+      selectedNavIndex = index;
+    });
+
+    switch (index) {
+      case 0:
+        Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+                builder: (_) =>
+                    const DashboardScreen()));
+        break;
+      case 1:
+        Navigator.push(
+            context,
+            MaterialPageRoute(
+                builder: (_) =>
+                    const TransactionsPage()));
+        break;
+      case 2:
+        Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+                builder: (_) =>
+                    const BudgetPlannerScreen()));
+        break;
+      case 4:
+        Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+                builder: (_) =>
+                    const SplitBillsScreen()));
+        break;
+      case 5:
+        break;
+    }
   }
-  }
 
-  /// ================= PREMIUM GRADIENT STAT CARD =================
+  /// ================= STAT CARD =================
 
   Widget _buildStatCard(
-      String title, String value, Color baseColor) {
+      String title, String value, Color color) {
     return Expanded(
       child: Container(
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
             colors: [
-              baseColor.withOpacity(0.75),
-              baseColor,
-              baseColor.withOpacity(0.9),
+              color.withOpacity(0.75),
+              color,
             ],
           ),
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: [
-            BoxShadow(
-              color: baseColor.withOpacity(0.35),
-              blurRadius: 22,
-              offset: const Offset(0, 12),
-            )
-          ],
+          borderRadius:
+              BorderRadius.circular(24),
         ),
         child: Column(
           crossAxisAlignment:
@@ -258,19 +386,17 @@ class _BillsPageState extends State<BillsPage> {
             Text(
               value,
               style: const TextStyle(
-                fontSize: 30,
-                fontWeight: FontWeight.bold,
+                fontSize: 28,
+                fontWeight:
+                    FontWeight.bold,
                 color: Colors.white,
-                letterSpacing: 0.5,
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             Text(
               title,
               style: const TextStyle(
-                color: Colors.white70,
-                fontSize: 14,
-              ),
+                  color: Colors.white70),
             ),
           ],
         ),
@@ -280,52 +406,81 @@ class _BillsPageState extends State<BillsPage> {
 
   /// ================= BILL CARD =================
 
-  Widget _buildBillCard(QueryDocumentSnapshot doc) {
+  Widget _buildBillCard(
+      QueryDocumentSnapshot doc) {
     final data =
         doc.data() as Map<String, dynamic>;
 
-    final now = DateTime.now();
-    int dueDay = data['dueDate'];
+   final now = DateTime.now();
+final DateTime dueDate =
+    (data['nextDueDate'] as Timestamp).toDate();
 
-    DateTime dueDate =
-        DateTime(now.year, now.month, dueDay);
+final int difference =
+    dueDate.difference(now).inDays;
 
-    bool isOverdue = dueDate.isBefore(now);
+DateTime? lastPaid;
 
-    String status =
-        isOverdue ? "OVERDUE" : "UPCOMING";
+if (data['lastPaidDate'] != null) {
+  lastPaid =
+      (data['lastPaidDate'] as Timestamp).toDate();
+}
 
-    Color badgeColor =
-        isOverdue ? danger : success;
+/// -------- VISIBILITY LOGIC --------
+
+bool showBill = false;
+
+if (difference < 0) {
+  // Overdue
+  showBill = true;
+} else if (difference <= 3) {
+  // 3 days before due
+  showBill = true;
+} else if (lastPaid != null &&
+    now.difference(lastPaid).inDays <= 2) {
+  // show 2 days after payment
+  showBill = true;
+}
+
+if (!showBill) {
+  return const SizedBox(); // 🔥 Hide bill
+}
+
+/// -------- STATUS LOGIC --------
+
+String status;
+Color badgeColor;
+
+if (lastPaid != null &&
+    now.difference(lastPaid).inDays <= 2) {
+  status = "PAID";
+  badgeColor = success;
+} else if (difference < 0) {
+  status = "OVERDUE";
+  badgeColor = danger;
+} else if (difference <= 3) {
+  status = "DUE SOON";
+  badgeColor = warning;
+} else {
+  status = "UPCOMING";
+  badgeColor = primary;
+}
 
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
       padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius:
+            BorderRadius.circular(24),
         boxShadow: const [
           BoxShadow(
-            blurRadius: 18,
-            color: Colors.black12,
-            offset: Offset(0, 10),
-          )
+              blurRadius: 18,
+              color: Colors.black12,
+              offset: Offset(0, 10))
         ],
       ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: accent.withOpacity(0.1),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.receipt_long,
-                color: accent),
-          ),
-          const SizedBox(width: 22),
-
           Expanded(
             child: Column(
               crossAxisAlignment:
@@ -343,31 +498,37 @@ class _BillsPageState extends State<BillsPage> {
                     const SizedBox(width: 12),
                     Container(
                       padding:
-                          const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 5),
-                      decoration: BoxDecoration(
+                          const EdgeInsets
+                              .symmetric(
+                                  horizontal:
+                                      10,
+                                  vertical:
+                                      5),
+                      decoration:
+                          BoxDecoration(
                         color: badgeColor,
                         borderRadius:
-                            BorderRadius.circular(10),
+                            BorderRadius
+                                .circular(
+                                    10),
                       ),
                       child: Text(
                         status,
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontWeight:
-                                FontWeight.bold),
+                        style:
+                            const TextStyle(
+                                color: Colors
+                                    .white,
+                                fontSize:
+                                    11,
+                                fontWeight:
+                                    FontWeight
+                                        .bold),
                       ),
                     )
                   ],
                 ),
                 const SizedBox(height: 10),
-                Text(
-                  "₹${data['amount']}",
-                  style: const TextStyle(
-                      fontWeight: FontWeight.w600),
-                ),
+                Text("₹${data['amount']}"),
                 const SizedBox(height: 6),
                 Text(
                   "Due: ${dueDate.day}/${dueDate.month}/${dueDate.year}",
@@ -380,11 +541,25 @@ class _BillsPageState extends State<BillsPage> {
 
           Column(
             children: [
+             if (status != "PAID")
+  IconButton(
+    icon: const Icon(Icons.check_circle, color: success),
+    onPressed: () async {
+      await _markAsPaid(doc);
+    },
+  ),
+
               IconButton(
-                icon: const Icon(Icons.check_circle,
-                    color: success),
-                onPressed: () async {
-                  await _markAsPaid(doc);
+                icon: const Icon(Icons.edit),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          AddEditBillPage(
+                              billDoc: doc),
+                    ),
+                  );
                 },
               ),
               IconButton(
@@ -412,21 +587,60 @@ class _BillsPageState extends State<BillsPage> {
     final data =
         doc.data() as Map<String, dynamic>;
 
+    final now = DateTime.now();
+    final nextDue =
+        (data['nextDueDate'] as Timestamp)
+            .toDate();
+
+    final int interval =
+        data['interval'] ?? 1;
+
+    final frequency =
+        (data['frequency'] ?? '')
+            .toString()
+            .toLowerCase();
+
+    DateTime updatedNextDue;
+
+    if (frequency == 'monthly') {
+      updatedNextDue = DateTime(
+          nextDue.year,
+          nextDue.month + interval,
+          nextDue.day);
+    } else if (frequency == 'yearly') {
+      updatedNextDue = DateTime(
+          nextDue.year + interval,
+          nextDue.month,
+          nextDue.day);
+    } else {
+      updatedNextDue =
+          nextDue.add(Duration(
+              days: 30 * interval));
+    }
+
     await FirebaseFirestore.instance
-        .collection('transactions')
-        .add({
-      'uid': user!.uid,
-      'amount': data['amount'],
-      'category': data['category'],
-      'type': 'Expense',
-      'createdAt': Timestamp.now(),
-    });
+    .collection('transactions')
+    .add({
+  'uid': user!.uid,
+  'amount': data['amount'],
+  'category': data['category'] ?? "Bill",
+  'account': "Bank", // 👈 ADD THIS
+  'type': 'expense', // 👈 keep lowercase consistent
+  'date': Timestamp.fromDate(now),
+  'createdAt': FieldValue.serverTimestamp(),
+  'source': 'bill',
+});
+
 
     await FirebaseFirestore.instance
         .collection('bills')
         .doc(doc.id)
         .update({
-      'lastPaidDate': Timestamp.now(),
+      'lastPaidDate':
+          Timestamp.fromDate(now),
+      'nextDueDate':
+          Timestamp.fromDate(
+              updatedNextDue),
     });
   }
 }

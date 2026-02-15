@@ -149,9 +149,10 @@ List<String> categoryList = ['All'];
 final allTransactions = snapshot.data!.docs;
 final categories = allTransactions
     .map((doc) =>
-        (doc.data() as Map<String, dynamic>)['category'] as String)
+        (doc.data() as Map<String, dynamic>)['category']?.toString() ?? "Uncategorized")
     .toSet()
     .toList();
+
 
 categoryList = ['All', ...categories];
 
@@ -160,8 +161,9 @@ final transactions = allTransactions.where((doc) {
   final data = doc.data() as Map<String, dynamic>;
 
   final type = data['type'];
-  final account = data['account'];
-  final category = data['category'];
+  final account = data['account'] ?? "—";
+final category = data['category'] ?? "Uncategorized";
+
 
   final matchesSearch =
       category.toString().toLowerCase().contains(searchQuery);
