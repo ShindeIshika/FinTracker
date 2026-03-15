@@ -31,8 +31,7 @@ class _FintrackerSignUpState extends State<FintrackerSignUp> {
       RegExp(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.(com|in|org|net|edu)$");
   final RegExp _passwordRegex =
       RegExp(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$');
-  final RegExp _usernameRegex = RegExp(r'^[a-z][a-z0-9_]{3,15}$');
-
+  final RegExp _usernameRegex = RegExp(r'^[a-zA-Z0-9_.@]{3,20}$');
 
   void _showSnack(String message) {
     ScaffoldMessenger.of(context).showSnackBar(

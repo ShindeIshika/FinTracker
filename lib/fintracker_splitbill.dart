@@ -14,6 +14,9 @@ import 'split_bills_request_page.dart';
 
 const String kExpenseType = "expense";
 const String kIncomeType = "income";
+const String kSplitBillCategory = "Split Bill";
+const String kDefaultAccount = "Cash";
+
 class SplitBillPage extends StatefulWidget {
   const SplitBillPage({super.key});
 
@@ -27,33 +30,43 @@ class _SplitBillPageState extends State<SplitBillPage> {
 
   int selectedIndex = 4;
 
-String _displayNameFromData(Map<String, dynamic> data) {
-  final name = (data["name"] ?? "").toString().trim();
-  if (name.isNotEmpty) {
-    return name.split(" ").first;
+  String _extractFirstName(Map<String, dynamic> data) {
+    final firstName = (data["firstName"] ??
+            data["firstname"] ??
+            data["first_name"] ??
+            "")
+        .toString()
+        .trim();
+    if (firstName.isNotEmpty) return firstName;
+
+    final name = (data["name"] ?? "").toString().trim();
+    if (name.isNotEmpty) return name.split(" ").first;
+
+    final username = (data["username"] ?? "").toString().trim();
+    if (username.isNotEmpty) return username;
+
+    final email = (data["email"] ?? "").toString().trim();
+    if (email.isNotEmpty) return email.split("@").first;
+
+    return "User";
   }
 
-  final username = (data["username"] ?? "").toString().trim();
-  if (username.isNotEmpty) {
-    return username.split("@").first;
+  String _firstNameFromParticipant(Map<String, dynamic> p) {
+    return _extractFirstName(p);
   }
 
-  final email = (data["email"] ?? "").toString().trim();
-  if (email.isNotEmpty) {
-    return email.split("@").first;
+  String _displayNameFromData(Map<String, dynamic> data) {
+    return _extractFirstName(data);
   }
-
-  return "User";
-}
 
   String _money(double value) => "₹${value.toStringAsFixed(0)}";
 
   List<Map<String, dynamic>> _getParticipants(Map<String, dynamic> bill) {
     final raw = bill["participants"] ?? [];
     return List<Map<String, dynamic>>.from(
-      raw.map((e) => Map<String, dynamic>.from(e)),
+      (raw as List).map((e) => Map<String, dynamic>.from(e)),
     );
-  }
+    }
 
   double _getTotal(Map<String, dynamic> bill) {
     return ((bill["total"] ?? 0) as num).toDouble();
@@ -105,15 +118,16 @@ String _displayNameFromData(Map<String, dynamic> data) {
     for (final p in participants) {
       final paid = ((p["paid"] ?? 0) as num).toDouble();
       final balance = paid - share;
+      final firstName = _firstNameFromParticipant(p);
 
       if (balance > 0.01) {
         creditors.add({
-          "name": p["name"] ?? "User",
+          "name": firstName,
           "amount": balance,
         });
       } else if (balance < -0.01) {
         debtors.add({
-          "name": p["name"] ?? "User",
+          "name": firstName,
           "amount": -balance,
         });
       }
@@ -124,14 +138,14 @@ String _displayNameFromData(Map<String, dynamic> data) {
     int j = 0;
 
     while (i < debtors.length && j < creditors.length) {
-      final double pay =
-          debtors[i]["amount"] < creditors[j]["amount"]
-              ? debtors[i]["amount"]
-              : creditors[j]["amount"];
+      final double pay = debtors[i]["amount"] < creditors[j]["amount"]
+          ? debtors[i]["amount"]
+          : creditors[j]["amount"];
 
-      settlements.add(
-        "${debtors[i]['name']} owes ${creditors[j]['name']}",
-      );
+      final debtorName = debtors[i]["name"].toString().trim();
+      final creditorName = creditors[j]["name"].toString().trim();
+
+      settlements.add("$debtorName owes $creditorName ${_money(pay)}");
 
       debtors[i]["amount"] -= pay;
       creditors[j]["amount"] -= pay;
@@ -149,7 +163,9 @@ String _displayNameFromData(Map<String, dynamic> data) {
 
     final usersRef = firestore.collection("users");
 
-    QuerySnapshot snap = await usersRef.where("username", isEqualTo: q).limit(1).get();
+    QuerySnapshot snap =
+        await usersRef.where("username", isEqualTo: q).limit(1).get();
+
     if (snap.docs.isEmpty) {
       snap = await usersRef.where("email", isEqualTo: q).limit(1).get();
     }
@@ -161,7 +177,13 @@ String _displayNameFromData(Map<String, dynamic> data) {
 
     return {
       "uid": data["uid"] ?? doc.id,
-      "name": data["name"] ?? data["username"] ?? data["email"] ?? "User",
+      "firstName": (data["firstName"] ??
+              data["firstname"] ??
+              data["first_name"] ??
+              "")
+          .toString()
+          .trim(),
+      "name": _displayNameFromData(data),
       "username": data["username"] ?? "",
       "email": data["email"] ?? "",
     };
@@ -242,6 +264,7 @@ String _displayNameFromData(Map<String, dynamic> data) {
 
                           setDialogState(() {
                             editableParticipants.add({
+                              "firstName": foundUser["firstName"] ?? "",
                               "name": foundUser["name"],
                               "paid": 0.0,
                               "uid": uid,
@@ -269,126 +292,217 @@ String _displayNameFromData(Map<String, dynamic> data) {
     );
   }
 
-  Future<void> _markSettlement({
-  required Map<String, dynamic> bill,
-  required String billId,
-  required String action,
-  required bool addTransaction,
-}) async {
-  final user = auth.currentUser;
-  if (user == null) return;
+  Future<void> _upsertCreatorInitialTransaction({
+    required String billId,
+    required String uid,
+    required String title,
+    required double creatorPaid,
+  }) async {
+    final existing = await firestore
+        .collection("transactions")
+        .where("splitBillId", isEqualTo: billId)
+        .where("uid", isEqualTo: uid)
+        .where("transactionRole", isEqualTo: "initial_payment")
+        .limit(1)
+        .get();
 
-  final balance = _getUserBalance(bill, user.uid);
+    if (creatorPaid <= 0) {
+      for (final doc in existing.docs) {
+        await doc.reference.delete();
+      }
+      return;
+    }
 
-  double amount = 0;
-  if (action == "paid") {
-    amount = balance < 0 ? -balance : 0;
-  } else {
-    amount = balance > 0 ? balance : 0;
+    final txData = {
+      "title": "$title - Split Bill",
+      "amount": creatorPaid,
+      "type": kExpenseType,
+      "category": kSplitBillCategory,
+      "account": kDefaultAccount,
+      "date": Timestamp.now(),
+      "uid": uid,
+      "splitBillId": billId,
+      "transactionRole": "initial_payment",
+    };
+
+    if (existing.docs.isEmpty) {
+      await firestore.collection("transactions").add(txData);
+    } else {
+      await existing.docs.first.reference.update(txData);
+    }
   }
 
-  if (amount <= 0) return;
+  Future<void> _upsertSettlementTransaction({
+    required String billId,
+    required String uid,
+    required String title,
+    required double amount,
+    required String action,
+  }) async {
+    final existing = await firestore
+        .collection("transactions")
+        .where("splitBillId", isEqualTo: billId)
+        .where("uid", isEqualTo: uid)
+        .where("transactionRole", isEqualTo: "settlement")
+        .limit(1)
+        .get();
 
-  final Map<String, dynamic> settlements =
-      Map<String, dynamic>.from(bill["userSettlements"] ?? {});
-
-  final Map<String, dynamic> existing =
-      Map<String, dynamic>.from(settlements[user.uid] ?? {});
-
-  final alreadyMarkedSame = existing["status"] == action;
-  final alreadyTransactionAdded = existing["transactionAdded"] == true;
-
-  if (alreadyMarkedSame) {
-    return;
-  }
-
-  settlements[user.uid] = {
-    "status": action,
-    "amount": amount,
-    "transactionAdded": addTransaction,
-    "updatedAt": Timestamp.now(),
-  };
-
-  await firestore.collection("split_bills").doc(billId).update({
-    "userSettlements": settlements,
-  });
-
-  if (addTransaction && !alreadyTransactionAdded) {
-    await firestore.collection("transactions").add({
-      "title": "${bill["title"] ?? "Split Bill"} - Settlement",
+    final txData = {
+      "title": "$title - Settlement",
       "amount": amount,
       "type": action == "paid" ? kExpenseType : kIncomeType,
-      "category": "Split Bill",
-      "account": "Cash",
+      "category": kSplitBillCategory,
+      "account": kDefaultAccount,
       "date": Timestamp.now(),
-      "uid": user.uid,
+      "uid": uid,
       "splitBillId": billId,
+      "transactionRole": "settlement",
+      "settlementAction": action,
+    };
+
+    if (existing.docs.isEmpty) {
+      await firestore.collection("transactions").add(txData);
+    } else {
+      await existing.docs.first.reference.update(txData);
+    }
+  }
+
+  Future<void> _markSettlement({
+    required Map<String, dynamic> bill,
+    required String billId,
+    required String action,
+  }) async {
+    final user = auth.currentUser;
+    if (user == null) return;
+
+    final balance = _getUserBalance(bill, user.uid);
+
+    double amount = 0;
+    if (action == "paid") {
+      amount = balance < 0 ? -balance : 0;
+    } else {
+      amount = balance > 0 ? balance : 0;
+    }
+
+    if (amount <= 0) return;
+
+    final Map<String, dynamic> settlements =
+        Map<String, dynamic>.from(bill["userSettlements"] ?? {});
+
+    final Map<String, dynamic> existing =
+        Map<String, dynamic>.from(settlements[user.uid] ?? {});
+
+    if (existing["status"] == action) {
+      return;
+    }
+
+    settlements[user.uid] = {
+      "status": action,
+      "amount": amount,
+      "updatedAt": Timestamp.now(),
+    };
+
+    await firestore.collection("split_bills").doc(billId).update({
+      "userSettlements": settlements,
     });
+
+    await _upsertSettlementTransaction(
+      billId: billId,
+      uid: user.uid,
+      title: (bill["title"] ?? "Split Bill").toString(),
+      amount: amount,
+      action: action,
+    );
   }
-}
+
   Future<void> showSettlementDialog(
-  BuildContext context,
-  Map<String, dynamic> bill,
-  String billId,
-  String action,
-) async {
-  final user = auth.currentUser;
-  if (user == null) return;
+    BuildContext context,
+    Map<String, dynamic> bill,
+    String billId,
+    String action,
+  ) async {
+    final user = auth.currentUser;
+    if (user == null) return;
 
-  final balance = _getUserBalance(bill, user.uid);
+    final balance = _getUserBalance(bill, user.uid);
 
-  double amount = 0;
-  if (action == "paid") {
-    amount = balance < 0 ? -balance : 0;
-  } else {
-    amount = balance > 0 ? balance : 0;
-  }
+    double amount = 0;
+    if (action == "paid") {
+      amount = balance < 0 ? -balance : 0;
+    } else {
+      amount = balance > 0 ? balance : 0;
+    }
 
-  if (amount <= 0) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
+    if (amount <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            action == "paid"
+                ? "You do not owe anything in this bill."
+                : "No one owes you anything in this bill.",
+          ),
+        ),
+      );
+      return;
+    }
+
+    await showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(action == "paid" ? "Mark as Paid" : "Mark as Received"),
         content: Text(
           action == "paid"
-              ? "You do not owe anything in this bill."
-              : "No one owes you anything in this bill.",
+              ? "Amount: ${_money(amount)}\nThis will be added to transactions as expense."
+              : "Amount: ${_money(amount)}\nThis will be added to transactions as income.",
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              await _markSettlement(
+                bill: bill,
+                billId: billId,
+                action: action,
+              );
+              if (context.mounted) Navigator.pop(context);
+            },
+            child: const Text("Confirm"),
+          ),
+        ],
       ),
     );
-    return;
   }
 
-  await showDialog(
-    context: context,
-    builder: (_) => AlertDialog(
-      title: Text(action == "paid" ? "Mark as Paid" : "Mark as Received"),
-      content: Text(
-        action == "paid"
-            ? "Amount: ${_money(amount)}\nAdd this to transactions as expense?"
-            : "Amount: ${_money(amount)}\nAdd this to transactions as income?",
+  Future<void> _confirmDeleteBill(
+    String billId,
+    DocumentReference billRef,
+  ) async {
+    final shouldDelete = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text("Delete Bill"),
+        content: const Text("Are you sure you want to delete this bill?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text("Delete"),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () {
-            Navigator.pop(context); // ONLY CLOSE
-          },
-          child: const Text("No"),
-        ),
-        ElevatedButton(
-          onPressed: () async {
-            await _markSettlement(
-              bill: bill,
-              billId: billId,
-              action: action,
-              addTransaction: true,
-            );
-            if (context.mounted) Navigator.pop(context);
-          },
-          child: const Text("Yes"),
-        ),
-      ],
-    ),
-  );
-}
+    );
+
+    if (shouldDelete == true) {
+      await deleteBillWithRequests(billId, billRef);
+    }
+  }
+
   Future<void> _updateBillAndRequests({
     required DocumentSnapshot doc,
     required Map<String, dynamic> oldBill,
@@ -400,7 +514,8 @@ String _displayNameFromData(Map<String, dynamic> data) {
     final billId = doc.id;
 
     final oldParticipants = _getParticipants(oldBill);
-    final oldParticipantUids = List<String>.from(oldBill["participantUids"] ?? []);
+    final oldParticipantUids =
+        List<String>.from(oldBill["participantUids"] ?? []);
     final oldSettlements =
         Map<String, dynamic>.from(oldBill["userSettlements"] ?? {});
 
@@ -450,6 +565,17 @@ String _displayNameFromData(Map<String, dynamic> data) {
       for (final r in reqs.docs) {
         await r.reference.delete();
       }
+
+      final removedSettlementTx = await firestore
+          .collection("transactions")
+          .where("splitBillId", isEqualTo: billId)
+          .where("uid", isEqualTo: uid)
+          .where("transactionRole", isEqualTo: "settlement")
+          .get();
+
+      for (final tx in removedSettlementTx.docs) {
+        await tx.reference.delete();
+      }
     }
 
     for (final uid in addedUids) {
@@ -462,11 +588,12 @@ String _displayNameFromData(Map<String, dynamic> data) {
           .limit(1)
           .get();
 
-      if (existing.docs.isEmpty) {
-        final participant = newParticipants.firstWhere(
-          (p) => (p["uid"] ?? "").toString() == uid,
-        );
+      final participant = newParticipants.firstWhere(
+        (p) => (p["uid"] ?? "").toString() == uid,
+        orElse: () => <String, dynamic>{},
+      );
 
+      if (existing.docs.isEmpty) {
         await firestore.collection("split_bill_requests").add({
           "billId": billId,
           "billTitle": title,
@@ -481,6 +608,7 @@ String _displayNameFromData(Map<String, dynamic> data) {
         await existing.docs.first.reference.update({
           "billTitle": title,
           "total": total,
+          "participantName": participant["name"] ?? "User",
           "status": "pending",
           "date": Timestamp.now(),
         });
@@ -497,12 +625,32 @@ String _displayNameFromData(Map<String, dynamic> data) {
       final toUid = (data["toUid"] ?? "").toString();
 
       if (newAppUserUids.contains(toUid)) {
+        final participant = newParticipants.firstWhere(
+          (p) => (p["uid"] ?? "").toString() == toUid,
+          orElse: () => <String, dynamic>{},
+        );
+
         await req.reference.update({
           "billTitle": title,
           "total": total,
+          "participantName": participant["name"] ?? "User",
         });
       }
     }
+
+    final creatorParticipant = newParticipants.firstWhere(
+      (p) => (p["uid"] ?? "").toString() == currentUid,
+      orElse: () => {"paid": 0},
+    );
+
+    final creatorPaid = ((creatorParticipant["paid"] ?? 0) as num).toDouble();
+
+    await _upsertCreatorInitialTransaction(
+      billId: billId,
+      uid: currentUid,
+      title: title,
+      creatorPaid: creatorPaid,
+    );
   }
 
   Future<void> showEditBillDialog(
@@ -558,7 +706,8 @@ String _displayNameFromData(Map<String, dynamic> data) {
                         );
 
                         final bool isSelf =
-                            (participant["uid"] ?? "").toString() == auth.currentUser!.uid;
+                            (participant["uid"] ?? "").toString() ==
+                                auth.currentUser!.uid;
 
                         return Card(
                           margin: const EdgeInsets.only(bottom: 8),
@@ -580,7 +729,8 @@ String _displayNameFromData(Map<String, dynamic> data) {
                                 ),
                                 TextField(
                                   controller: paidController,
-                                  keyboardType: const TextInputType.numberWithOptions(
+                                  keyboardType:
+                                      const TextInputType.numberWithOptions(
                                     decimal: true,
                                   ),
                                   decoration: const InputDecoration(
@@ -592,7 +742,8 @@ String _displayNameFromData(Map<String, dynamic> data) {
                                   },
                                 ),
                                 Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
                                   children: [
                                     Text(
                                       participant["isuser"] == true
@@ -662,14 +813,18 @@ String _displayNameFromData(Map<String, dynamic> data) {
 
                     if (titleController.text.trim().isEmpty || total == null) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text("Enter valid title and total")),
+                        const SnackBar(
+                          content: Text("Enter valid title and total"),
+                        ),
                       );
                       return;
                     }
 
                     if (editableParticipants.isEmpty) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text("Add at least one participant")),
+                        const SnackBar(
+                          content: Text("Add at least one participant"),
+                        ),
                       );
                       return;
                     }
@@ -710,25 +865,41 @@ String _displayNameFromData(Map<String, dynamic> data) {
     String billId,
     DocumentReference billRef,
   ) async {
-    final requests = await firestore
-        .collection("split_bill_requests")
-        .where("billId", isEqualTo: billId)
-        .get();
+    try {
+      final batch = firestore.batch();
 
-    for (final doc in requests.docs) {
-      await doc.reference.delete();
+      final requests = await firestore
+          .collection("split_bill_requests")
+          .where("billId", isEqualTo: billId)
+          .get();
+
+      for (final doc in requests.docs) {
+        batch.delete(doc.reference);
+      }
+
+      final transactions = await firestore
+          .collection("transactions")
+          .where("splitBillId", isEqualTo: billId)
+          .get();
+
+      for (final tx in transactions.docs) {
+        batch.delete(tx.reference);
+      }
+
+      batch.delete(billRef);
+
+      await batch.commit();
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Bill deleted successfully")),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Delete failed: $e")),
+      );
     }
-
-    final linkedTransactions = await firestore
-        .collection("transactions")
-        .where("splitBillId", isEqualTo: billId)
-        .get();
-
-    for (final tx in linkedTransactions.docs) {
-      await tx.reference.delete();
-    }
-
-    await billRef.delete();
   }
 
   Widget balanceCard(String label, double amount, Color color) {
@@ -894,7 +1065,9 @@ String _displayNameFromData(Map<String, dynamic> data) {
               case 2:
                 Navigator.pushReplacement(
                   context,
-                  MaterialPageRoute(builder: (_) => const BudgetPlannerScreen()),
+                  MaterialPageRoute(
+                    builder: (_) => const BudgetPlannerScreen(),
+                  ),
                 );
                 break;
               case 3:
@@ -1015,7 +1188,8 @@ String _displayNameFromData(Map<String, dynamic> data) {
                             ...settlements.map(
                               (s) => Text(
                                 s,
-                                style: const TextStyle(color: Colors.deepPurple),
+                                style:
+                                    const TextStyle(color: Colors.deepPurple),
                               ),
                             ),
                             if (myStatus == "paid")
@@ -1041,7 +1215,7 @@ String _displayNameFromData(Map<String, dynamic> data) {
                             if (value == "edit") {
                               await showEditBillDialog(context, docs[index], bill);
                             } else if (value == "delete") {
-                              await deleteBillWithRequests(
+                              await _confirmDeleteBill(
                                 docs[index].id,
                                 docs[index].reference,
                               );

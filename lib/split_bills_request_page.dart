@@ -2,52 +2,63 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
-class SplitBillRequestsPage extends StatelessWidget {
+class SplitBillRequestsPage extends StatefulWidget {
   const SplitBillRequestsPage({super.key});
 
-  Future<void> _acceptRequest(DocumentSnapshot requestDoc) async {
+  @override
+  State<SplitBillRequestsPage> createState() => _SplitBillRequestsPageState();
+}
+
+class _SplitBillRequestsPageState extends State<SplitBillRequestsPage> {
+  String? processingId;
+
+ Future<void> _acceptRequest(DocumentSnapshot requestDoc) async {
+  try {
     final data = requestDoc.data() as Map<String, dynamic>;
-    final billId = data["billId"];
-    final toUid = data["toUid"];
+    final String billId = (data["billId"] ?? "").toString();
+    final String toUid = (data["toUid"] ?? "").toString();
 
     final billRef =
         FirebaseFirestore.instance.collection("split_bills").doc(billId);
 
-    await FirebaseFirestore.instance.runTransaction((transaction) async {
-      final billSnap = await transaction.get(billRef);
-      if (!billSnap.exists) {
-        transaction.update(requestDoc.reference, {"status": "bill_deleted"});
-        return;
-      }
+    final batch = FirebaseFirestore.instance.batch();
 
-      final billData = billSnap.data() as Map<String, dynamic>;
-      final currentUids = List<String>.from(billData["participantUids"] ?? []);
-
-      if (!currentUids.contains(toUid)) {
-        currentUids.add(toUid);
-      }
-
-      transaction.update(billRef, {
-        "participantUids": currentUids,
-        "updatedAt": Timestamp.now(),
-      });
-
-      transaction.update(requestDoc.reference, {
-        "status": "accepted",
-      });
+    batch.update(billRef, {
+      "participantUids": FieldValue.arrayUnion([toUid]),
+      "updatedAt": Timestamp.now(),
     });
+
+    batch.update(requestDoc.reference, {
+      "status": "accepted",
+      "updatedAt": Timestamp.now(),
+    });
+
+    await batch.commit();
+  } catch (e) {
+    rethrow;
   }
+}
 
   Future<void> _rejectRequest(DocumentSnapshot requestDoc) async {
-    final data = requestDoc.data() as Map<String, dynamic>;
-    final billId = data["billId"];
-    final toUid = data["toUid"];
+    try {
+      setState(() {
+        processingId = requestDoc.id;
+      });
 
-    final billRef =
-        FirebaseFirestore.instance.collection("split_bills").doc(billId);
+      final data = requestDoc.data() as Map<String, dynamic>;
+      final String billId = (data["billId"] ?? "").toString();
+      final String toUid = (data["toUid"] ?? "").toString();
 
-    await FirebaseFirestore.instance.runTransaction((transaction) async {
-      final billSnap = await transaction.get(billRef);
+      if (billId.isEmpty || toUid.isEmpty) {
+        throw Exception("Invalid request data");
+      }
+
+      final billRef =
+          FirebaseFirestore.instance.collection("split_bills").doc(billId);
+
+      final billSnap = await billRef.get();
+
+      final batch = FirebaseFirestore.instance.batch();
 
       if (billSnap.exists) {
         final billData = billSnap.data() as Map<String, dynamic>;
@@ -69,7 +80,7 @@ class SplitBillRequestsPage extends StatelessWidget {
             Map<String, dynamic>.from(billData["userSettlements"] ?? {});
         userSettlements.remove(toUid);
 
-        transaction.update(billRef, {
+        batch.update(billRef, {
           "participants": participants,
           "participantUids": participantUids,
           "userSettlements": userSettlements,
@@ -77,10 +88,29 @@ class SplitBillRequestsPage extends StatelessWidget {
         });
       }
 
-      transaction.update(requestDoc.reference, {
+      batch.update(requestDoc.reference, {
         "status": "rejected",
+        "updatedAt": Timestamp.now(),
       });
-    });
+
+      await batch.commit();
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Request rejected")),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Reject failed: $e")),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          processingId = null;
+        });
+      }
+    }
   }
 
   @override
@@ -121,7 +151,9 @@ class SplitBillRequestsPage extends StatelessWidget {
           return ListView.builder(
             itemCount: docs.length,
             itemBuilder: (context, index) {
-              final data = docs[index].data() as Map<String, dynamic>;
+              final doc = docs[index];
+              final data = doc.data() as Map<String, dynamic>;
+              final bool isProcessing = processingId == doc.id;
 
               return Card(
                 margin: const EdgeInsets.all(10),
@@ -137,19 +169,25 @@ class SplitBillRequestsPage extends StatelessWidget {
                           Text("Added as: ${data["participantName"]}"),
                       ],
                     ),
-                    trailing: Wrap(
-                      spacing: 8,
-                      children: [
-                        TextButton(
-                          onPressed: () => _rejectRequest(docs[index]),
-                          child: const Text("Reject"),
-                        ),
-                        ElevatedButton(
-                          onPressed: () => _acceptRequest(docs[index]),
-                          child: const Text("Accept"),
-                        ),
-                      ],
-                    ),
+                    trailing: isProcessing
+                        ? const SizedBox(
+                            height: 28,
+                            width: 28,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Wrap(
+                            spacing: 8,
+                            children: [
+                              TextButton(
+                                onPressed: () => _rejectRequest(doc),
+                                child: const Text("Reject"),
+                              ),
+                              ElevatedButton(
+                                onPressed: () => _acceptRequest(doc),
+                                child: const Text("Accept"),
+                              ),
+                            ],
+                          ),
                   ),
                 ),
               );

@@ -4,6 +4,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 const String kExpenseType = "expense";
 const String kIncomeType = "income";
+const String kSplitBillCategory = "Split Bill";
+const String kDefaultAccount = "Cash";
+
 class AddSplitBillPage extends StatefulWidget {
   const AddSplitBillPage({super.key});
 
@@ -18,50 +21,114 @@ class _AddSplitBillPageState extends State<AddSplitBillPage> {
   final TextEditingController titleController = TextEditingController();
   final TextEditingController totalController = TextEditingController();
 
-String _displayNameFromData(Map<String, dynamic> data) {
-  final name = (data["name"] ?? "").toString().trim();
-  if (name.isNotEmpty) {
-    return name.split(" ").first;
-  }
-
-  final username = (data["username"] ?? "").toString().trim();
-  if (username.isNotEmpty) {
-    return username.split("@").first;
-  }
-
-  final email = (data["email"] ?? "").toString().trim();
-  if (email.isNotEmpty) {
-    return email.split("@").first;
-  }
-
-  return "User";
-}
   List<Map<String, dynamic>> participants = [];
+
+  String _extractFirstName(Map<String, dynamic> data) {
+    final firstName = (data["firstName"] ??
+            data["firstname"] ??
+            data["first_name"] ??
+            "")
+        .toString()
+        .trim();
+    if (firstName.isNotEmpty) return firstName;
+
+    final name = (data["name"] ?? "").toString().trim();
+    if (name.isNotEmpty) return name.split(" ").first;
+
+    final username = (data["username"] ?? "").toString().trim();
+    if (username.isNotEmpty) return username;
+
+    final email = (data["email"] ?? "").toString().trim();
+    if (email.isNotEmpty) return email.split("@").first;
+
+    return "User";
+  }
+
+  String _displayNameFromData(Map<String, dynamic> data) {
+    return _extractFirstName(data);
+  }
 
   @override
   void initState() {
     super.initState();
-    _addCreatorAsParticipant();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _addCreatorAsParticipant();
+    });
   }
 
-  void _addCreatorAsParticipant() {
+  Future<void> _addCreatorAsParticipant() async {
     final user = auth.currentUser;
     if (user == null) return;
 
     final alreadyExists = participants.any(
       (p) => (p["uid"] ?? "").toString() == user.uid,
     );
+    if (alreadyExists) return;
 
-    if (!alreadyExists) {
+    String firstName = "";
+    String displayName = "You";
+    String username = "";
+    String email = user.email ?? "";
+
+    try {
+      DocumentSnapshot<Map<String, dynamic>> userDoc =
+          await firestore.collection("users").doc(user.uid).get();
+
+      if (!userDoc.exists && user.email != null) {
+        final byEmail = await firestore
+            .collection("users")
+            .where("email", isEqualTo: user.email)
+            .limit(1)
+            .get();
+
+        if (byEmail.docs.isNotEmpty) {
+          userDoc = byEmail.docs.first;
+        }
+      }
+
+      if (userDoc.exists) {
+        final data = Map<String, dynamic>.from(userDoc.data() ?? {});
+        firstName = (data["firstName"] ??
+                data["firstname"] ??
+                data["first_name"] ??
+                "")
+            .toString()
+            .trim();
+        displayName = _displayNameFromData(data);
+        username = (data["username"] ?? "").toString();
+        email = (data["email"] ?? user.email ?? "").toString();
+      } else {
+        displayName = ((user.displayName ?? "").trim().isNotEmpty)
+            ? user.displayName!.trim().split(" ").first
+            : ((user.email ?? "").isNotEmpty
+                ? user.email!.split("@").first
+                : "You");
+        firstName = displayName;
+        username = user.email ?? "";
+      }
+    } catch (_) {
+      displayName = ((user.displayName ?? "").trim().isNotEmpty)
+          ? user.displayName!.trim().split(" ").first
+          : ((user.email ?? "").isNotEmpty
+              ? user.email!.split("@").first
+              : "You");
+      firstName = displayName;
+      username = user.email ?? "";
+    }
+
+    if (!mounted) return;
+
+    setState(() {
       participants.add({
-        "name": user.displayName ?? user.email ?? "You",
+        "firstName": firstName,
+        "name": displayName,
         "paid": 0.0,
         "uid": user.uid,
-        "username": user.email ?? "",
-        "email": user.email ?? "",
+        "username": username,
+        "email": email,
         "isuser": true,
       });
-    }
+    });
   }
 
   Future<Map<String, dynamic>?> _findUserByUsernameOrEmail(String value) async {
@@ -70,7 +137,9 @@ String _displayNameFromData(Map<String, dynamic> data) {
 
     final usersRef = firestore.collection("users");
 
-    QuerySnapshot snap = await usersRef.where("username", isEqualTo: q).limit(1).get();
+    QuerySnapshot snap =
+        await usersRef.where("username", isEqualTo: q).limit(1).get();
+
     if (snap.docs.isEmpty) {
       snap = await usersRef.where("email", isEqualTo: q).limit(1).get();
     }
@@ -81,11 +150,17 @@ String _displayNameFromData(Map<String, dynamic> data) {
     final data = Map<String, dynamic>.from(doc.data() as Map<String, dynamic>);
 
     return {
-  "uid": data["uid"] ?? doc.id,
-  "name": _displayNameFromData(data),
-  "username": data["username"] ?? "",
-  "email": data["email"] ?? "",
-};
+      "uid": data["uid"] ?? doc.id,
+      "firstName": (data["firstName"] ??
+              data["firstname"] ??
+              data["first_name"] ??
+              "")
+          .toString()
+          .trim(),
+      "name": _displayNameFromData(data),
+      "username": data["username"] ?? "",
+      "email": data["email"] ?? "",
+    };
   }
 
   Future<void> _showAddAppUserDialog() async {
@@ -158,8 +233,11 @@ String _displayNameFromData(Map<String, dynamic> data) {
                             return;
                           }
 
+                          if (!mounted) return;
+
                           setState(() {
                             participants.add({
+                              "firstName": foundUser["firstName"] ?? "",
                               "name": foundUser["name"],
                               "paid": 0.0,
                               "uid": uid,
@@ -197,6 +275,27 @@ String _displayNameFromData(Map<String, dynamic> data) {
     });
   }
 
+  Future<void> _createCreatorInitialTransaction({
+    required String billId,
+    required String title,
+    required double amount,
+    required String uid,
+  }) async {
+    if (amount <= 0) return;
+
+    await firestore.collection("transactions").add({
+      "title": "$title - Split Bill",
+      "amount": amount,
+      "type": kExpenseType,
+      "category": kSplitBillCategory,
+      "account": kDefaultAccount,
+      "date": Timestamp.now(),
+      "uid": uid,
+      "splitBillId": billId,
+      "transactionRole": "initial_payment",
+    });
+  }
+
   Future<void> saveBill() async {
     final user = auth.currentUser;
     if (user == null) return;
@@ -227,19 +326,40 @@ String _displayNameFromData(Map<String, dynamic> data) {
       }
     }
 
+    double paidSum = 0;
+    for (final p in participants) {
+      paidSum += ((p["paid"] ?? 0) as num).toDouble();
+    }
+
+    if ((paidSum - total).abs() > 0.01) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            "Total paid by participants must equal bill total. Now it is ₹${paidSum.toStringAsFixed(0)}",
+          ),
+        ),
+      );
+      return;
+    }
+
     final creatorUid = user.uid;
 
-    bool creatorExists = participants.any(
+    final creatorExists = participants.any(
       (p) => (p["uid"] ?? "").toString() == creatorUid,
     );
 
     if (!creatorExists) {
       participants.insert(0, {
+        "firstName": ((user.displayName ?? "").trim().isNotEmpty)
+            ? user.displayName!.trim().split(" ").first
+            : ((user.email ?? "").isNotEmpty
+                ? user.email!.split("@").first
+                : "You"),
         "name": ((user.displayName ?? "").trim().isNotEmpty)
-    ? user.displayName!.trim().split(" ").first
-    : ((user.email ?? "").isNotEmpty
-        ? user.email!.split("@").first
-        : "You"),
+            ? user.displayName!.trim().split(" ").first
+            : ((user.email ?? "").isNotEmpty
+                ? user.email!.split("@").first
+                : "You"),
         "paid": 0.0,
         "uid": creatorUid,
         "username": user.email ?? "",
@@ -252,10 +372,10 @@ String _displayNameFromData(Map<String, dynamic> data) {
       "title": title,
       "total": total,
       "createdBy": creatorUid,
-      "uid": creatorUid, // backward compatibility
+      "uid": creatorUid,
       "date": Timestamp.now(),
       "participants": participants,
-      "participantUids": [creatorUid], // only creator sees first
+      "participantUids": [creatorUid],
       "userSettlements": {},
     });
 
@@ -283,21 +403,22 @@ String _displayNameFromData(Map<String, dynamic> data) {
 
     final creatorPaid = ((creatorParticipant["paid"] ?? 0) as num).toDouble();
 
-    if (creatorPaid > 0) {
-      await firestore.collection("transactions").add({
-        "title": "$title - Split Bill",
-        "amount": creatorPaid,
-        "type": "expense",
-        "category": title,
-        "account": "Cash",
-        "date": Timestamp.now(),
-        "uid": creatorUid,
-        "splitBillId": billRef.id,
-      });
-    }
+    await _createCreatorInitialTransaction(
+      billId: billRef.id,
+      title: title,
+      amount: creatorPaid,
+      uid: creatorUid,
+    );
 
     if (!mounted) return;
     Navigator.pop(context);
+  }
+
+  @override
+  void dispose() {
+    titleController.dispose();
+    totalController.dispose();
+    super.dispose();
   }
 
   @override

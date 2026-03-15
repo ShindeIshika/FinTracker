@@ -13,6 +13,7 @@ import 'package:flutter_fintracker/fintracker_transaction.dart';
 import 'package:flutter_fintracker/previous_tips.dart';
 import 'package:flutter_fintracker/recurring_payments.dart';
 import 'widgets/side_nav.dart';
+import 'split_bills_request_page.dart';
 
 final List<Map<String, String>> financeTips = [
   {
@@ -377,16 +378,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
         barRods: [
           BarChartRodData(
             toY: data['income']!,
-            width: 8,
+            width: 6,
             color: Colors.green,
           ),
           BarChartRodData(
             toY: data['expense']!,
-            width: 8,
+            width: 6,
             color: Colors.red,
           ),
         ],
-        barsSpace: 4,
+        barsSpace: 3,
       );
     });
   }
@@ -407,6 +408,57 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         ),
         actions: [
+          StreamBuilder<QuerySnapshot>(
+  stream: _firestore
+      .collection("split_bill_requests")
+      .where("toUid", isEqualTo: _auth.currentUser?.uid)
+      .where("status", isEqualTo: "pending")
+      .snapshots(),
+  builder: (context, snapshot) {
+    final count = snapshot.data?.docs.length ?? 0;
+
+    return Stack(
+      children: [
+        IconButton(
+          icon: const Icon(Icons.notifications, color: Colors.white),
+          tooltip: "Split Bill Requests",
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const SplitBillRequestsPage(),
+              ),
+            );
+          },
+        ),
+        if (count > 0)
+          Positioned(
+            right: 8,
+            top: 8,
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: const BoxDecoration(
+                color: Colors.red,
+                shape: BoxShape.circle,
+              ),
+              constraints: const BoxConstraints(
+                minWidth: 18,
+                minHeight: 18,
+              ),
+              child: Text(
+                "$count",
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+      ],
+    );
+  },
+),
           IconButton(
             icon: const Icon(Icons.repeat, color: Colors.white),
             tooltip: "Recurring Payments",
@@ -452,7 +504,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
       ),
       body: Container(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(12),
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
@@ -476,25 +528,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
               Row(
                 children: [
-                  _statCard(
-                    title: "Total Balance",
-                    amount: "₹ ${totalBalance.toStringAsFixed(0)}",
-                    icon: Icons.account_balance_wallet,
-                    iconColor: Colors.blue,
+                  Expanded(
+                    child: _statCard(
+                      title: "Total Balance",
+                      amount: "₹ ${totalBalance.toStringAsFixed(0)}",
+                      icon: Icons.account_balance_wallet,
+                      iconColor: Colors.blue,
+                    ),
                   ),
-                  _statCard(
-                    title: "Income",
-                    amount: "₹ ${totalIncome.toStringAsFixed(0)}",
-                    icon: Icons.trending_up,
-                    iconColor: Colors.green,
-                    amountColor: const Color.fromARGB(255, 2, 135, 7),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _statCard(
+                      title: "Income",
+                      amount: "₹ ${totalIncome.toStringAsFixed(0)}",
+                      icon: Icons.trending_up,
+                      iconColor: Colors.green,
+                      amountColor: const Color.fromARGB(255, 2, 135, 7),
+                    ),
                   ),
-                  _statCard(
-                    title: "Expenses",
-                    amount: "₹ ${totalExpense.toStringAsFixed(0)}",
-                    icon: Icons.trending_down,
-                    iconColor: Colors.red,
-                    amountColor: const Color.fromARGB(255, 194, 21, 9),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _statCard(
+                      title: "Expenses",
+                      amount: "₹ ${totalExpense.toStringAsFixed(0)}",
+                      icon: Icons.trending_down,
+                      iconColor: Colors.red,
+                      amountColor: const Color.fromARGB(255, 194, 21, 9),
+                    ),
                   ),
                 ],
               ),
@@ -545,6 +605,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             }
                           },
                         ),
+                        const SizedBox(width: 8),
                         _quickActionButton(
                           icon: Icons.add_circle_outline,
                           label: "Add Income",
@@ -648,7 +709,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ),
                           const SizedBox(height: 12),
                           SizedBox(
-                            height: 230,
+                            height: 200,
                             child: Builder(
                               builder: (context) {
                                 final categoryTotals = getCategoryTotals();
@@ -661,7 +722,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   child: PieChart(
                                     PieChartData(
                                       centerSpaceRadius: 0,
-                                      sectionsSpace: 2,
+                                      sectionsSpace: 1,
                                       pieTouchData: PieTouchData(
                                         touchCallback: (event, response) {
                                           setState(() {
@@ -685,6 +746,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                                 value: 1,
                                                 title: 'No Data',
                                                 color: Colors.grey,
+                                                radius: 70,
+                                                titleStyle: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 11,
+                                                ),
                                               )
                                             ]
                                           : List.generate(
@@ -704,20 +771,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
                                                 return PieChartSectionData(
                                                   value: entry.value,
-                                                  radius:
-                                                      isTouched ? 110 : 95,
+                                                  radius: isTouched ? 80 : 70,
                                                   color: categoryColors[
                                                           entry.key] ??
                                                       Colors.primaries[index %
-                                                          Colors.primaries
-                                                              .length],
+                                                          Colors.primaries.length],
                                                   title: isTouched
                                                       ? "${entry.key}\n${percent.toStringAsFixed(1)}%"
                                                       : "",
                                                   titleStyle: const TextStyle(
                                                     color: Colors.white,
                                                     fontWeight: FontWeight.bold,
-                                                    fontSize: 14,
+                                                    fontSize: 11,
                                                   ),
                                                 );
                                               },
@@ -733,7 +798,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                     const SizedBox(height: 16),
                     Container(
-                      height: 300,
+                      height: 240,
                       width: double.infinity,
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
@@ -763,7 +828,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             child: Center(
                               child: Padding(
                                 padding:
-                                    const EdgeInsets.symmetric(horizontal: 8),
+                                    const EdgeInsets.symmetric(horizontal: 4),
                                 child: BarChart(
                                   BarChartData(
                                     maxY: getMaxY(),
@@ -782,7 +847,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                       leftTitles: AxisTitles(
                                         sideTitles: SideTitles(
                                           showTitles: true,
-                                          reservedSize: 70,
+                                          reservedSize: 42,
                                           interval: getMaxY() / 5,
                                           getTitlesWidget: (value, meta) {
                                             String text;
@@ -795,8 +860,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
                                             return Text(
                                               text,
-                                              style:
-                                                  const TextStyle(fontSize: 11),
+                                              style: const TextStyle(
+                                                fontSize: 9,
+                                              ),
                                               softWrap: false,
                                             );
                                           },
@@ -805,7 +871,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                       bottomTitles: AxisTitles(
                                         sideTitles: SideTitles(
                                           showTitles: true,
-                                          reservedSize: 40,
+                                          reservedSize: 28,
                                           getTitlesWidget: (value, meta) {
                                             const months = [
                                               'Jan',
@@ -827,8 +893,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                             }
                                             return Text(
                                               months[index],
-                                              style:
-                                                  const TextStyle(fontSize: 11),
+                                              style: const TextStyle(
+                                                fontSize: 9,
+                                              ),
                                             );
                                           },
                                         ),
@@ -950,45 +1017,49 @@ class _DashboardScreenState extends State<DashboardScreen> {
     required Color iconColor,
     Color? amountColor,
   }) {
-    return Expanded(
-      child: Container(
-        margin: const EdgeInsets.only(right: 12),
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(18),
-          boxShadow: const [
-            BoxShadow(
-              color: Colors.black12,
-              blurRadius: 10,
-              offset: Offset(0, 4),
-            )
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            CircleAvatar(
-              radius: 20,
-              backgroundColor: iconColor.withOpacity(0.18),
-              child: Icon(icon, color: iconColor),
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: const [
+          BoxShadow(
+            color: Colors.black12,
+            blurRadius: 8,
+            offset: Offset(0, 3),
+          )
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CircleAvatar(
+            radius: 16,
+            backgroundColor: iconColor.withOpacity(0.18),
+            child: Icon(icon, color: iconColor, size: 18),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 12,
+              color: Colors.blueGrey,
             ),
-            const SizedBox(height: 10),
-            Text(
-              title,
-              style: const TextStyle(fontSize: 14, color: Colors.blueGrey),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            amount,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: amountColor ?? const Color(0xFF083549),
             ),
-            const SizedBox(height: 6),
-            Text(
-              amount,
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-                color: amountColor ?? const Color(0xFF083549),
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -1000,18 +1071,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
     required VoidCallback onPressed,
   }) {
     return Expanded(
-      child: Container(
-        margin: const EdgeInsets.only(right: 12),
-        child: ElevatedButton.icon(
-          onPressed: onPressed,
-          icon: Icon(icon, color: Colors.white),
-          label: Text(label, style: const TextStyle(color: Colors.white)),
-          style: ElevatedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            backgroundColor: color,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
+      child: ElevatedButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon, color: Colors.white, size: 18),
+        label: Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 12,
+          ),
+        ),
+        style: ElevatedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          backgroundColor: color,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
           ),
         ),
       ),
@@ -1024,22 +1098,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF083549),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF083549),
+                  ),
                 ),
-              ),
-              Text(
-                date,
-                style: const TextStyle(fontSize: 12, color: Colors.grey),
-              ),
-            ],
+                Text(
+                  date,
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+              ],
+            ),
           ),
+          const SizedBox(width: 8),
           Text(
             amount,
             style: TextStyle(

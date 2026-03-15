@@ -10,6 +10,7 @@ import 'add_bills.dart';
 import 'fintracker_login.dart';
 import 'previous_tips.dart';
 import 'recurring_payments.dart';
+import 'split_bills_request_page.dart';
 
 class BillsPage extends StatefulWidget {
   const BillsPage({super.key});
@@ -22,7 +23,8 @@ class _BillsPageState extends State<BillsPage> {
   final user = FirebaseAuth.instance.currentUser;
   int selectedNavIndex = 5;
   bool _alertShown = false;
-
+final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+final FirebaseAuth _auth = FirebaseAuth.instance;
 
   static const Color bgColor = Color(0xFFF1F5F9);
   static const Color primary = Color.fromARGB(255, 38, 15, 42);
@@ -49,6 +51,58 @@ class _BillsPageState extends State<BillsPage> {
         ),
 
         actions: [
+          StreamBuilder<QuerySnapshot>(
+  stream: _firestore
+      .collection("split_bill_requests")
+      .where("toUid", isEqualTo: _auth.currentUser?.uid)
+      .where("status", isEqualTo: "pending")
+      .snapshots(),
+  builder: (context, snapshot) {
+    final count = snapshot.data?.docs.length ?? 0;
+
+    return Stack(
+      children: [
+        IconButton(
+          icon: const Icon(Icons.notifications, color: Colors.white),
+          tooltip: "Split Bill Requests",
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const SplitBillRequestsPage(),
+              ),
+            );
+          },
+        ),
+        if (count > 0)
+          Positioned(
+            right: 8,
+            top: 8,
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: const BoxDecoration(
+                color: Colors.red,
+                shape: BoxShape.circle,
+              ),
+              constraints: const BoxConstraints(
+                minWidth: 18,
+                minHeight: 18,
+              ),
+              child: Text(
+                "$count",
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+      ],
+    );
+  },
+),
+
 
     IconButton(
       icon: const Icon(Icons.repeat, color: Colors.white),
