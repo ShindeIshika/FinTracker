@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class TipsPage extends StatefulWidget {
   const TipsPage({super.key});
@@ -9,50 +10,77 @@ class TipsPage extends StatefulWidget {
 }
 
 class _TipsPageState extends State<TipsPage> {
-  List<String> tipHistory = [];
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   @override
-  void initState() {
-    super.initState();
-    loadTips();
-  }
+  Widget build(BuildContext context) {
+    final user = _auth.currentUser;
 
-  Future<void> loadTips() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      tipHistory = prefs.getStringList('tip_history') ?? [];
-    });
-  }
+    if (user == null) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text("Financial Tips History"),
+        ),
+        body: const Center(
+          child: Text("Please login to see your tips."),
+        ),
+      );
+    }
 
- @override
-Widget build(BuildContext context) {
-  return Scaffold(
-    backgroundColor: Colors.grey.shade100,
-    appBar: AppBar(
-      elevation: 0,
-      backgroundColor: Colors.white,
-      foregroundColor: Colors.black,
-      title: const Text(
-        "Financial Tips History",
-        style: TextStyle(fontWeight: FontWeight.bold),
+    return Scaffold(
+      backgroundColor: Colors.grey.shade100,
+      appBar: AppBar(
+        elevation: 0,
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black,
+        title: const Text(
+          "Financial Tips History",
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        centerTitle: true,
       ),
-      centerTitle: true,
-    ),
-    body: tipHistory.isEmpty
-        ? const Center(
-            child: Text(
-              "No tips viewed yet.",
-              style: TextStyle(color: Colors.grey),
-            ),
-          )
-        : ListView.builder(
+      body: StreamBuilder<QuerySnapshot>(
+        stream: _firestore
+            .collection('users')
+            .doc(user.uid)
+            .collection('previous_tips')
+            .orderBy('date', descending: true)
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (snapshot.hasError) {
+            return const Center(
+              child: Text(
+                "Error loading tips.",
+                style: TextStyle(color: Colors.red),
+              ),
+            );
+          }
+
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+            return const Center(
+              child: Text(
+                "No tips viewed yet.",
+                style: TextStyle(color: Colors.grey),
+              ),
+            );
+          }
+
+          final docs = snapshot.data!.docs;
+
+          return ListView.builder(
             padding: const EdgeInsets.all(20),
-            itemCount: tipHistory.length,
+            itemCount: docs.length,
             itemBuilder: (context, index) {
-              final parts = tipHistory[index].split('|');
-              final date = parts[0];
-              final term = parts[1];
-              final tip = parts[2];
+              final data = docs[index].data() as Map<String, dynamic>;
+
+              final String date = data['date'] ?? '';
+              final String term = data['term'] ?? '';
+              final String tip = data['tip'] ?? '';
 
               return Container(
                 margin: const EdgeInsets.only(bottom: 16),
@@ -71,96 +99,82 @@ Widget build(BuildContext context) {
                 child: InkWell(
                   borderRadius: BorderRadius.circular(16),
                   onTap: () {
-                    
                     showDialog(
-  context: context,
-  barrierColor: Colors.black.withOpacity(0.4),
-  builder: (_) {
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(
-          maxWidth: 420, // Controls width on web
-        ),
-        child: Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 24,
-              vertical: 20,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min, // 👈 Important
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-
-                /// Icon
-                Center(
-                  child: Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.shade100,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.lightbulb_outline,
-                      color: Colors.orange,
-                      size: 24,
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-
-                /// Title
-                Text(
-                  term,
-                  style: const TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-
-                const SizedBox(height: 4),
-
-                /// Date
-                Text(
-                  date,
-                  style: const TextStyle(
-                    color: Colors.grey,
-                    fontSize: 12,
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-
-                Text(
-                  tip,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    height: 1.5,
-                  ),
-                ),
-
-                const SizedBox(height: 20),
-
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text("Close"),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  },
-);
-
+                      context: context,
+                      barrierColor: Colors.black.withOpacity(0.4),
+                      builder: (_) {
+                        return Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 420),
+                            child: Dialog(
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(18),
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 24,
+                                  vertical: 20,
+                                ),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    Center(
+                                      child: Container(
+                                        padding: const EdgeInsets.all(10),
+                                        decoration: BoxDecoration(
+                                          color: Colors.orange.shade100,
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: const Icon(
+                                          Icons.lightbulb_outline,
+                                          color: Colors.orange,
+                                          size: 24,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 16),
+                                    Text(
+                                      term,
+                                      style: const TextStyle(
+                                        fontSize: 17,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      date,
+                                      style: const TextStyle(
+                                        color: Colors.grey,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 16),
+                                    Text(
+                                      tip,
+                                      style: const TextStyle(
+                                        fontSize: 14,
+                                        height: 1.5,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 20),
+                                    Align(
+                                      alignment: Alignment.centerRight,
+                                      child: TextButton(
+                                        onPressed: () =>
+                                            Navigator.pop(context),
+                                        child: const Text("Close"),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    );
                   },
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -211,14 +225,15 @@ Widget build(BuildContext context) {
                         Icons.arrow_forward_ios,
                         size: 14,
                         color: Colors.grey,
-                      )
+                      ),
                     ],
                   ),
                 ),
               );
             },
-          ),
-  );
-}
-
+          );
+        },
+      ),
+    );
+  }
 }
