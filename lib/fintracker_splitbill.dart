@@ -1,403 +1,400 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter_fintracker/fintracker_bills.dart';
-import 'package:flutter_fintracker/fintracker_budget.dart';
-import 'package:flutter_fintracker/fintracker_home.dart';
-import 'package:flutter_fintracker/add_transaction.dart';
-import 'package:flutter_fintracker/fintracker_login.dart';
-import 'package:flutter_fintracker/fintracker_transaction.dart';
+import 'add_split_bill.dart';
+import 'fintracker_login.dart';
+import 'fintracker_transaction.dart';
 import 'widgets/side_nav.dart';
-import 'package:flutter_fintracker/add_split_bill.dart';
+import 'previous_tips.dart';
+import 'recurring_payments.dart';
+import 'fintracker_home.dart';
+import 'fintracker_budget.dart';
+import 'fintracker_bills.dart';
 
-
-class SplitBillsScreen extends StatefulWidget {
-  const SplitBillsScreen({super.key});
+class SplitBillPage extends StatefulWidget {
+  const SplitBillPage({super.key});
 
   @override
-  State<SplitBillsScreen> createState() => _SplitBillsScreenState();
+  State<SplitBillPage> createState() => _SplitBillPageState();
 }
 
-class _SplitBillsScreenState extends State<SplitBillsScreen> {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  
-  int selectedNavIndex = 4; // Split Bills is index 4
-  String firstName = "User";
-  
-  double youOwe = 10.0;
-  double theyOwe = 25.0;
-  
-  List<Map<String, dynamic>> splitBills = [];
+class _SplitBillPageState extends State<SplitBillPage> {
 
-  @override
-  void initState() {
-    super.initState();
-    fetchUserName();
-    fetchSplitBills();
-  }
+  final FirebaseFirestore firestore = FirebaseFirestore.instance;
+  final FirebaseAuth auth = FirebaseAuth.instance;
+int selectedIndex = 4;
+  double youOwe = 0;
+  double theyOwe = 0;
 
-  void handleNavTap(int index) {
-    if (index == selectedNavIndex) return;
+  List<String> calculateSettlements(Map<String, dynamic> bill) {
 
-    setState(() {
-      selectedNavIndex = index;
-    });
+  List participants = bill['participants'];
+  double total = (bill['total'] as num).toDouble();
 
-    switch (index) {
-      case 0: // Dashboard
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const DashboardScreen()),
-        );
-        break;
-      case 1: // Transaction
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const TransactionsPage()),
-        );
-        break;
-      case 2: // Budget
-         Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const BudgetPlannerScreen()),
-        );
-        break;
-       case 4: // Split Bills
-         Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const SplitBillsScreen()),
-        );
-        break;
-        case 5: // Bills
-         Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const BillsPage()),
-        );
-        break;
+  double share = total / participants.length;
 
-     
-    }
-  }
+  List<Map<String, dynamic>> creditors = [];
+  List<Map<String, dynamic>> debtors = [];
 
-  Future<void> fetchUserName() async {
-    final user = _auth.currentUser;
-    if (user == null) return;
+  for (var p in participants) {
 
-    final doc = await _firestore.collection('users').doc(user.uid).get();
-    if (doc.exists) {
-      setState(() {
-        firstName = doc['firstName'];
+    double paid = (p['paid'] as num).toDouble();
+    double balance = paid - share;
+
+    if (balance > 0) {
+      creditors.add({
+        "name": p['name'],
+        "amount": balance
+      });
+    } else if (balance < 0) {
+      debtors.add({
+        "name": p['name'],
+        "amount": -balance
       });
     }
+
   }
 
-  Future<void> fetchSplitBills() async {
-    final user = _auth.currentUser;
-    if (user == null) return;
+  List<String> settlements = [];
 
-    // For demo - replace with real Firestore 'split_bills' collection
-    setState(() {
-      splitBills = [
-        {
-          'id': '1',
-          'title': 'Dinner restaurant',
-          'total': 80.0,
-          'date': Timestamp.now(),
-          'participants': [
-            {'name': 'Mia Chen', 'share': 30.0, 'paid': false},
-            {'name': 'John', 'share': 25.0, 'paid': false},
-            {'name': 'You', 'share': 25.0, 'paid': true},
-          ]
-        },
-        {
-          'id': '2',
-          'title': 'Uber trip 20-10',
-          'total': 60.0,
-          'date': Timestamp.now(),
-          'participants': [
-            {'name': 'You', 'share': 20.0, 'paid': true},
-            {'name': 'Sarah', 'share': 20.0, 'paid': false},
-            {'name': 'Mike', 'share': 20.0, 'paid': false},
-          ]
+  int i = 0;
+  int j = 0;
+
+  while (i < debtors.length && j < creditors.length) {
+
+    double pay = debtors[i]['amount'] < creditors[j]['amount']
+        ? debtors[i]['amount']
+        : creditors[j]['amount'];
+
+    settlements.add(
+        "${debtors[i]['name']} owes ${creditors[j]['name']} ₹${pay.toStringAsFixed(0)}");
+
+    debtors[i]['amount'] -= pay;
+    creditors[j]['amount'] -= pay;
+
+    if (debtors[i]['amount'] == 0) i++;
+    if (creditors[j]['amount'] == 0) j++;
+
+  }
+
+  return settlements;
+}
+
+  void calculateBalances(List<QueryDocumentSnapshot> docs) {
+
+    final user = auth.currentUser;
+
+    double owe = 0;
+    double owed = 0;
+
+    for (var doc in docs) {
+
+      var bill = doc.data() as Map<String, dynamic>;
+      List participants = bill['participants'];
+
+      double share = bill['total'] / participants.length;
+
+      for (var p in participants) {
+
+        if (p['uid'] == user!.uid) {
+
+          double paid = (p['paid'] as num).toDouble();
+
+          if (paid < share) {
+            owe += (share - paid);
+          }
+
+          if (paid > share) {
+            owed += (paid - share);
+          }
         }
-      ];
-      
-      // Calculate balances
-      youOwe = splitBills
-          .expand((bill) => bill['participants'])
-          .where((p) => p['name'] == 'You' && !p['paid'])
-          .fold(0.0, (sum, p) => sum + (p['share'] as num).toDouble());
-      theyOwe = splitBills
-          .expand((bill) => bill['participants'])
-          .where((p) => p['name'] != 'You' && !p['paid'])
-          .fold(0.0, (sum, p) => sum + (p['share'] as num).toDouble());
-    });
-  }
+      }
+    }
 
-  String formatDate(Timestamp date) {
-    final d = date.toDate();
-    return '${d.day}-${d.month}-${d.year}';
-  }
-
-  void settleBill(String billId) {
-    // Update Firestore - mark as paid
     setState(() {
-      fetchSplitBills();
+      youOwe = owe;
+      theyOwe = owed;
     });
   }
 
   @override
   Widget build(BuildContext context) {
+
     return Scaffold(
-      body: Row(
-        children: [
-          SideNav(
-            selectedIndex: selectedNavIndex,
-            onItemTap: handleNavTap,
+
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF083549),
+        iconTheme: const IconThemeData(color: Colors.white),
+  elevation: 0,
+
+        title: const Text(
+          "Split The Bill",
+          style: TextStyle(
+            fontSize: 24,
+            color:Colors.white,
+            fontWeight: FontWeight.bold,
           ),
-          Expanded(
-            child: Container(
-              padding: const EdgeInsets.all(20),
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [Color(0xFFF7FBFF), Color(0xFFEFF3F6)],
-                ),
-              ),
-              child: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          "Split Bills",
-                          style: TextStyle(
-                            fontSize: 24,
-                            color: Color(0xFF083549),
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.logout),
-                          onPressed: () async {
-                            await FirebaseAuth.instance.signOut();
-                            Navigator.pushReplacement(
-                              context,
-                              MaterialPageRoute(builder: (_) => const LoginPage()),
-                            );
-                          },
-                        ),
-                      ],
-                    ),
-                    Text(
-                      "Welcome, $firstName",
-                      style: const TextStyle(fontSize: 16, color: Colors.blueGrey),
-                    ),
-                    const SizedBox(height: 30),
-
-                    // Balances Row
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _balanceCard('You owe', youOwe, true),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: _balanceCard('They owe', theyOwe, false),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 30),
-
-                    // Split Bills List
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        boxShadow: const [
-                          BoxShadow(
-                            color: Colors.black12,
-                            blurRadius: 6,
-                            offset: Offset(0, 3),
-                          )
-                        ],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            "Split Bills & Track Payments",
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF083549),
-                            ),
-                          ),
-                          const SizedBox(height: 20),
-                          ...splitBills.map((bill) => _billCard(bill, context)).toList(),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () async {
-          final result = await Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => AddSplitBillPage(), // ← NEW SCREEN
-            ),
-          );
-          if (result == true) {
-            fetchSplitBills(); // Refresh list
-          }
-        },
-        backgroundColor: const Color(0xFF1E3A8A), // Dark blue
-        child: const Icon(Icons.add, color: Colors.white),
-      ),
-    );
-  }
-
-  Widget _balanceCard(String label, double amount, bool isOwe) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: isOwe ? Colors.red.shade50 : Colors.green.shade50,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isOwe ? Colors.red.shade200 : Colors.green.shade200,
         ),
-      ),
-      child: Column(
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 14,
-              color: isOwe ? Colors.red.shade700 : Colors.green.shade700,
-              fontWeight: FontWeight.w500,
-            ),
+
+        actions: [
+
+    IconButton(
+      icon: const Icon(Icons.repeat, color: Colors.white),
+      tooltip: "Recurring Payments",
+      onPressed: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const RecurringPaymentsPage(),
           ),
-          const SizedBox(height: 8),
-          Text(
-            '₹ ${amount.toStringAsFixed(0)}',
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: isOwe ? Colors.red.shade700 : Colors.green.shade700,
-            ),
+        );
+      },
+    ),
+
+    IconButton(
+      icon: const Icon(Icons.lightbulb, color: Colors.yellow),
+      tooltip: "Finance Tips",
+      onPressed: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const TipsPage(),
           ),
-        ],
+        );
+      },
+    ),
+
+    IconButton(
+      icon: const Icon(Icons.logout, color: Colors.white),
+      tooltip: "Logout",
+      onPressed: () async {
+        await FirebaseAuth.instance.signOut();
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const LoginPage()),
+        );
+      },
+    ),
+
+  ],
+),
+      drawer: Drawer(
+          /// SIDE NAV
+        child:  SideNav(
+  selectedIndex: selectedIndex,
+  onItemTap: (index) {
+
+    Navigator.pop(context);
+    if (index == selectedIndex) return;
+
+    setState(() {
+      selectedIndex = index;
+    });
+
+    switch (index) {
+      case 0:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const DashboardScreen()),
+        );
+        break;
+
+      case 1:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const TransactionsPage()),
+        );
+        break;
+
+      case 2:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const BudgetPlannerScreen()),
+        );
+        break;
+
+      case 3:
+        //savings
+        break;
+
+      case 4:
+        break;
+      case 5:
+      Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const BillsPage()),
+        );
+        break;
+    }
+  },
+),
       ),
+
+
+      floatingActionButton: FloatingActionButton(
+        child: const Icon(Icons.add),
+        onPressed: () async {
+
+          await Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const AddSplitBillPage()),
+          );
+        },
+      ),
+
+     body: StreamBuilder<QuerySnapshot>(
+
+  stream: firestore
+      .collection("split_bills")
+      //.orderBy("date", descending: true)
+      .snapshots(),
+
+  builder: (context, snapshot) {
+
+    if (snapshot.connectionState == ConnectionState.waiting) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (snapshot.hasError) {
+  return Center(
+    child: Text("Error: ${snapshot.error}"),
+  );
+}
+
+if (!snapshot.hasData) {
+  return const Center(child: Text("No data"));
+}
+
+    var docs = snapshot.data!.docs;
+
+    if (docs.isEmpty) {
+      return const Center(child: Text("No bills yet"));
+    }
+
+    double youOwe = 0;
+    double theyOwe = 0;
+
+    final user = auth.currentUser;
+
+    for (var doc in docs) {
+
+      var bill = doc.data() as Map<String, dynamic>;
+      List participants = bill['participants'];
+
+      double share = bill['total'] / participants.length;
+
+      for (var p in participants) {
+
+        if (p['uid'] == user!.uid) {
+
+          double paid = (p['paid'] as num).toDouble();
+
+          if (paid < share) {
+            youOwe += (share - paid);
+          }
+
+          if (paid > share) {
+            theyOwe += (paid - share);
+          }
+
+        }
+
+      }
+
+    }
+
+    return Column(
+      children: [
+
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+
+              Expanded(
+                child: balanceCard("You Owe", youOwe, Colors.red),
+              ),
+
+              const SizedBox(width: 10),
+
+              Expanded(
+                child: balanceCard("They Owe", theyOwe, Colors.green),
+              ),
+
+            ],
+          ),
+        ),
+
+        Expanded(
+          child: ListView.builder(
+            itemCount: docs.length,
+            itemBuilder: (context, index) {
+
+              var bill = docs[index].data() as Map<String, dynamic>;
+              var settlements = calculateSettlements(bill);
+
+              return Card(
+                margin: const EdgeInsets.all(10),
+                child: ListTile(
+                  title: Text(bill['title']),
+                  
+subtitle: Column(
+  crossAxisAlignment: CrossAxisAlignment.start,
+  children: [
+
+    Text(
+      "Total ₹${bill['total']} | ${bill['participants'].length} people",
+    ),
+
+    const SizedBox(height: 5),
+
+    ...settlements.map((s) => Text(
+          s,
+          style: const TextStyle(color: Colors.deepPurple),
+        )),
+
+  ],
+),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  },
+),
     );
   }
 
-  Widget _billCard(Map<String, dynamic> bill, BuildContext context) {
+  Widget balanceCard(String label, double amount, Color color) {
+
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(16),
+
+      padding: const EdgeInsets.all(20),
+
       decoration: BoxDecoration(
-        color: const Color(0xFFF8F9FA),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade300),
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(10),
       ),
+
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                bill['title'],
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF083549),
-                ),
-              ),
-              Text(
-                formatDate(bill['date']),
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey.shade600,
-                ),
-              ),
-            ],
+
+          Text(label),
+
+          const SizedBox(height: 5),
+
+          Text(
+            "₹${amount.toStringAsFixed(0)}",
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
           ),
-          const SizedBox(height: 12),
-          
-          // Participants
-          ...bill['participants'].map<Widget>((participant) {
-            return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    participant['name'],
-                    style: const TextStyle(
-                      fontSize: 14,
-                      color: Color(0xFF083549),
-                    ),
-                  ),
-                  Row(
-                    children: [
-                      Text(
-                        '₹ ${(participant['share'] as num).toStringAsFixed(0)}',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: participant['paid']
-                              ? Colors.green.shade700
-                              : Colors.red.shade700,
-                        ),
-                      ),
-                      if (!participant['paid'])
-                        Icon(
-                          Icons.pending,
-                          color: Colors.orange.shade600,
-                          size: 16,
-                        ),
-                    ],
-                  ),
-                ],
-              ),
-            );
-          }).toList(),
-          
-          const Divider(height: 24),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Total: ₹ ${bill['total'].toStringAsFixed(0)}',
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF083549),
-                ),
-              ),
-              ElevatedButton(
-                onPressed: () => settleBill(bill['id']),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.orange,
-                  foregroundColor: Colors.white,
-                ),
-                child: const Text('Paid'),
-              ),
-            ],
-          ),
+
         ],
       ),
     );

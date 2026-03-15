@@ -10,178 +10,157 @@ class AddSplitBillPage extends StatefulWidget {
 }
 
 class _AddSplitBillPageState extends State<AddSplitBillPage> {
-  final _formKey = GlobalKey<FormState>();
-  final _firestore = FirebaseFirestore.instance;
-  final _auth = FirebaseAuth.instance;
-  
-  final _titleController = TextEditingController();
-  final _totalController = TextEditingController();
+
+  final titleController = TextEditingController();
+  final totalController = TextEditingController();
+  final nameController = TextEditingController();
+  final paidController = TextEditingController();
+  final usernameController = TextEditingController();
+
+  bool isUser = false;
+
   List<Map<String, dynamic>> participants = [];
-  int participantId = 0;
 
-  void addParticipant() {
-    setState(() {
-      participants.add({
-        'id': participantId++,
-        'name': '',
-        'share': 0.0,
-        'paid': false,
-      });
-    });
+  Future<void> addParticipant() async {
+
+  String uid = "";
+
+  if (isUser && usernameController.text.isNotEmpty) {
+
+    var query = await FirebaseFirestore.instance
+        .collection("users")
+        .where("username", isEqualTo: usernameController.text)
+        .get();
+
+    if (query.docs.isNotEmpty) {
+      uid = query.docs.first.id;
+    }
   }
 
-  void removeParticipant(int id) {
-    setState(() {
-      participants.removeWhere((p) => p['id'] == id);
-    });
-  }
+  participants.add({
+    "name": nameController.text,
+    "paid": double.parse(paidController.text),
+    "isuser": isUser,
+    "username": usernameController.text,
+    "uid": uid
+  });
 
-  Future<void> _saveBill() async {
-    if (!_formKey.currentState!.validate() || participants.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please fill all fields and add participants')),
-        );
-      }
-      return;
-    }
+  nameController.clear();
+  paidController.clear();
+  usernameController.clear();
 
-    final user = _auth.currentUser;
-    if (user == null) return;
+  setState(() {});
+}
+  Future<void> saveBill() async {
 
-    try {
-      final billData = {
-        'title': _titleController.text,
-        'total': double.parse(_totalController.text),
-        'participants': participants,
-        'uid': user.uid,
-        'createdAt': Timestamp.now(),
-      };
+    final user = FirebaseAuth.instance.currentUser;
 
-      await _firestore.collection('split_bills').add(billData);
-      
-      if (mounted) {
-        Navigator.pop(context, true);
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
-      }
-    }
+    await FirebaseFirestore.instance.collection("split_bills").add({
+  "title": titleController.text,
+  "total": double.parse(totalController.text),
+  "createdBy": user!.uid,
+  "date": Timestamp.now(),
+  "participants": participants,
+  "participantUIDs": participants
+      .where((p) => p["isUser"] == true)
+      .map((p) => p["uid"])
+      .toList(), // <-- NEW FIELD
+});
+
+    Navigator.pop(context);
   }
 
   @override
   Widget build(BuildContext context) {
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Add Split Bill'),
-        backgroundColor: const Color(0xFF1E3A8A),
-        foregroundColor: Colors.white,
-      ),
+
+      appBar: AppBar(title: const Text("Add Split Bill")),
+
       body: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Form(
-          key: _formKey,
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+        padding: const EdgeInsets.all(16),
+
+        child: Column(
+
+          children: [
+
+            TextField(
+              controller: titleController,
+              decoration: const InputDecoration(labelText: "Title"),
+            ),
+
+            TextField(
+              controller: totalController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: "Total"),
+            ),
+
+            const SizedBox(height: 20),
+
+            const Text("Add Participant"),
+
+            TextField(
+              controller: nameController,
+              decoration: const InputDecoration(labelText: "Name"),
+            ),
+
+            TextField(
+              controller: paidController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: "Amount Paid"),
+            ),
+
+            Row(
               children: [
-                TextFormField(
-                  controller: _titleController,
-                  decoration: const InputDecoration(
-                    labelText: 'Bill Description',
-                    prefixIcon: Icon(Icons.restaurant),
-                    border: OutlineInputBorder(),
-                  ),
-                  validator: (value) => value!.isEmpty ? 'Enter bill description' : null,
+
+                Checkbox(
+                  value: isUser,
+                  onChanged: (v) {
+                    setState(() {
+                      isUser = v!;
+                    });
+                  },
                 ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _totalController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Total Amount',
-                    prefixText: '₹ ',
-                    prefixIcon: Icon(Icons.attach_money),
-                    border: OutlineInputBorder(),
-                  ),
-                  validator: (value) => value!.isEmpty ? 'Enter total amount' : null,
-                ),
-                const SizedBox(height: 24),
-                const Text('Participants', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 12),
-                
-                ...participants.map((participant) => Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          flex: 3,
-                          child: TextFormField(
-                            initialValue: participant['name'],
-                            decoration: const InputDecoration(
-                              labelText: 'Name',
-                              border: OutlineInputBorder(),
-                            ),
-                            onChanged: (value) {
-                              participant['name'] = value;
-                            },
-                          ),
-                        ),
-                        Expanded(
-                          flex: 2,
-                          child: TextFormField(
-                            initialValue: participant['share'].toString(),
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
-                              labelText: 'Share',
-                              prefixText: '₹ ',
-                              border: OutlineInputBorder(),
-                            ),
-                            onChanged: (value) {
-                              participant['share'] = double.tryParse(value) ?? 0.0;
-                            },
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.delete, color: Colors.red),
-                          onPressed: () => removeParticipant(participant['id']),
-                        ),
-                      ],
-                    ),
-                  ),
-                )).toList(),
-                
-                const SizedBox(height: 16),
-                ElevatedButton.icon(
-                  onPressed: addParticipant,
-                  icon: const Icon(Icons.person_add),
-                  label: const Text('Add Participant'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1E3A8A),
-                  ),
-                ),
-                const SizedBox(height: 32),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: _saveBill,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF1E3A8A),
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                    ),
-                    child: const Text(
-                      'Create Split Bill',
-                      style: TextStyle(fontSize: 16, color: Colors.white),
-                    ),
-                  ),
-                ),
+
+                const Text("App User")
+
               ],
             ),
-          ),
+
+            if (isUser)
+              TextField(
+                controller: usernameController,
+                decoration: const InputDecoration(labelText: "Username"),
+              ),
+
+            ElevatedButton(
+              onPressed: addParticipant,
+              child: const Text("Add Participant"),
+            ),
+
+            Expanded(
+              child: ListView.builder(
+
+                itemCount: participants.length,
+
+                itemBuilder: (context, index) {
+
+                  var p = participants[index];
+
+                  return ListTile(
+                    title: Text(p['name']),
+                    subtitle: Text("Paid ₹${p['paid']}"),
+                  );
+                },
+              ),
+            ),
+
+            ElevatedButton(
+              onPressed: saveBill,
+              child: const Text("Save Bill"),
+            )
+
+          ],
         ),
       ),
     );

@@ -2,11 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_fintracker/fintracker_bills.dart';
+import 'package:flutter_fintracker/fintracker_savings.dart';
 import 'widgets/side_nav.dart';
 import 'add_transaction.dart';
 import 'package:flutter_fintracker/fintracker_home.dart';
 import 'package:flutter_fintracker/fintracker_budget.dart';
 import 'package:flutter_fintracker/fintracker_splitbill.dart';
+import 'package:flutter_fintracker/fintracker_login.dart';
+import 'previous_tips.dart';
+import 'recurring_payments.dart';
+
 class TransactionsPage extends StatefulWidget {
   const TransactionsPage({super.key});
 
@@ -28,10 +33,65 @@ List<String> categoryList = ['All'];
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Row(
-        children: [
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF083549),
+        iconTheme: const IconThemeData(color: Colors.white),
+  elevation: 0,
+
+        title: const Text(
+          "Transactions",
+          style: TextStyle(
+            fontSize: 24,
+            color:Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+
+        actions: [
+
+    IconButton(
+      icon: const Icon(Icons.repeat, color: Colors.white),
+      tooltip: "Recurring Payments",
+      onPressed: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const RecurringPaymentsPage(),
+          ),
+        );
+      },
+    ),
+
+    IconButton(
+      icon: const Icon(Icons.lightbulb, color: Colors.yellow),
+      tooltip: "Finance Tips",
+      onPressed: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const TipsPage(),
+          ),
+        );
+      },
+    ),
+
+    IconButton(
+      icon: const Icon(Icons.logout, color: Colors.white),
+      tooltip: "Logout",
+      onPressed: () async {
+        await FirebaseAuth.instance.signOut();
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const LoginPage()),
+        );
+      },
+    ),
+
+  ],
+),
+      drawer: Drawer(
           /// SIDE NAV
-         SideNav(
+        child:  SideNav(
   selectedIndex: selectedIndex,
   onItemTap: (index) {
     if (index == selectedIndex) return;
@@ -63,13 +123,16 @@ List<String> categoryList = ['All'];
         break;
 
       case 3:
-        //savings
+        Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const SavingsPage()),
+      );
         break;
 
       case 4:
       Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (_) => const SplitBillsScreen()),
+          MaterialPageRoute(builder: (_) => const SplitBillPage()),
         );
         break;
       case 5:
@@ -81,11 +144,11 @@ List<String> categoryList = ['All'];
     }
   },
 ),
-
+      ),
 
           /// MAIN CONTENT
-          Expanded(
-            child: Column(
+        
+            body: Column(
               children: [
                 _buildTopBar(context),
                 _buildSearchAndFilters(),
@@ -315,10 +378,7 @@ final category = data['category'] ?? "Uncategorized";
                 ),
               ],
             ),
-          ),
-        ],
-      ),
-    );
+          );
   }
 
   /// TOP BAR WITH BUTTONS
@@ -327,10 +387,7 @@ final category = data['category'] ?? "Uncategorized";
       padding: const EdgeInsets.all(16),
       child: Row(
         children: [
-          const Text(
-            'Transactions',
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-          ),
+      
           const Spacer(),
 
           ElevatedButton.icon(
@@ -370,13 +427,6 @@ final category = data['category'] ?? "Uncategorized";
           ),
 
           const SizedBox(width: 20),
-
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () async {
-              await FirebaseAuth.instance.signOut();
-            },
-          ),
         ],
       ),
     );
@@ -384,19 +434,20 @@ final category = data['category'] ?? "Uncategorized";
 
   /// SEARCH + FILTERS
   Widget _buildSearchAndFilters() {
-    return Padding(
-      padding:
-          const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+  return Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+    child: SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
       child: Row(
         children: [
           SizedBox(
             width: 280,
             child: TextField(
               onChanged: (value) {
-    setState(() {
-      searchQuery = value.toLowerCase();
-    });
-  },
+                setState(() {
+                  searchQuery = value.toLowerCase();
+                });
+              },
               decoration: InputDecoration(
                 hintText: 'Search transactions...',
                 prefixIcon: const Icon(Icons.search),
@@ -406,61 +457,61 @@ final category = data['category'] ?? "Uncategorized";
               ),
             ),
           ),
-          const SizedBox(width: 10),
-
-          DropdownButton<String>(
-  value: selectedType,
-  items: const [
-    DropdownMenuItem(value: "All", child: Text("All Types")),
-    DropdownMenuItem(value: "income", child: Text("Income")),
-    DropdownMenuItem(value: "expense", child: Text("Expense")),
-  ],
-  onChanged: (value) {
-    setState(() {
-      selectedType = value!;
-    });
-  },
-),
 
           const SizedBox(width: 10),
 
           DropdownButton<String>(
-  value: selectedAccount,
-  items: const [
-    DropdownMenuItem(value: "All", child: Text("All Accounts")),
-    DropdownMenuItem(value: "Cash", child: Text("Cash")),
-    DropdownMenuItem(value: "Bank", child: Text("Bank")),
-    DropdownMenuItem(value: "Online", child: Text("Online"))
-  ],
-  onChanged: (value) {
-    setState(() {
-      selectedAccount = value!;
-    });
-  },
-),
+            value: selectedType,
+            items: const [
+              DropdownMenuItem(value: "All", child: Text("All Types")),
+              DropdownMenuItem(value: "income", child: Text("Income")),
+              DropdownMenuItem(value: "expense", child: Text("Expense")),
+            ],
+            onChanged: (value) {
+              setState(() {
+                selectedType = value!;
+              });
+            },
+          ),
 
-const SizedBox(width: 10),
+          const SizedBox(width: 10),
 
-DropdownButton<String>(
-  value: selectedCategory,
-  items: categoryList.map((category) {
-    return DropdownMenuItem(
-      value: category,
-      child: Text(
-        category == 'All' ? 'All Categories' : category,
-      ),
-    );
-  }).toList(),
-  onChanged: (value) {
-    setState(() {
-      selectedCategory = value!;
-    });
-  },
-),
+          DropdownButton<String>(
+            value: selectedAccount,
+            items: const [
+              DropdownMenuItem(value: "All", child: Text("All Accounts")),
+              DropdownMenuItem(value: "Cash", child: Text("Cash")),
+              DropdownMenuItem(value: "Bank", child: Text("Bank")),
+              DropdownMenuItem(value: "Online", child: Text("Online"))
+            ],
+            onChanged: (value) {
+              setState(() {
+                selectedAccount = value!;
+              });
+            },
+          ),
 
+          const SizedBox(width: 10),
 
+          DropdownButton<String>(
+            value: selectedCategory,
+            items: categoryList.map((category) {
+              return DropdownMenuItem(
+                value: category,
+                child: Text(
+                  category == 'All' ? 'All Categories' : category,
+                ),
+              );
+            }).toList(),
+            onChanged: (value) {
+              setState(() {
+                selectedCategory = value!;
+              });
+            },
+          ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 }

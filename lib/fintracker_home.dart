@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_fintracker/fintracker_bills.dart';
 import 'package:flutter_fintracker/fintracker_login.dart';
+import 'package:flutter_fintracker/fintracker_savings.dart';
 import 'package:flutter_fintracker/fintracker_splitbill.dart';
 import 'package:flutter_fintracker/add_transaction.dart';
 import 'package:flutter_fintracker/fintracker_budget.dart';
@@ -209,12 +210,15 @@ if (!history.contains(entry)) {
       );
       break;
     case 3: // Savings
-      // Navigate to savings page if exists
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const SavingsPage()),
+      );
       break;
     case 4: // Split Bills
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => const SplitBillsScreen()),
+        MaterialPageRoute(builder: (_) => const SplitBillPage()),
       );
       break;
     case 5:
@@ -338,14 +342,69 @@ if (!history.contains(entry)) {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Row(
-        children: [
-          SideNav(
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF083549),
+        iconTheme: const IconThemeData(color: Colors.white),
+  elevation: 0,
+
+        title: const Text(
+          "Dashboard",
+          style: TextStyle(
+            fontSize: 24,
+            color:Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+
+        actions: [
+
+    IconButton(
+      icon: const Icon(Icons.repeat, color: Colors.white),
+      tooltip: "Recurring Payments",
+      onPressed: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const RecurringPaymentsPage(),
+          ),
+        );
+      },
+    ),
+
+    IconButton(
+      icon: const Icon(Icons.lightbulb, color: Colors.yellow),
+      tooltip: "Finance Tips",
+      onPressed: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const TipsPage(),
+          ),
+        );
+      },
+    ),
+
+    IconButton(
+      icon: const Icon(Icons.logout, color: Colors.white),
+      tooltip: "Logout",
+      onPressed: () async {
+        await FirebaseAuth.instance.signOut();
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const LoginPage()),
+        );
+      },
+    ),
+
+  ],
+),
+      drawer: Drawer(
+          child:SideNav(
             selectedIndex: selectedNavIndex,
             onItemTap: handleNavTap,
           ),
-          Expanded(
-            child: Container(
+      ),
+            body: Container(
               padding: const EdgeInsets.all(20),
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
@@ -358,68 +417,6 @@ if (!history.contains(entry)) {
                 child: Column(
   crossAxisAlignment: CrossAxisAlignment.start,
   children: [
-
-    Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-
-        const Text(
-          "Dashboard",
-          style: TextStyle(
-            fontSize: 24,
-            color: Color(0xFF083549),
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-
-        Row(
-          children: [
-
-            IconButton(
-  icon: const Icon(Icons.repeat),
-  tooltip: "Recurring Payments",
-  onPressed: () {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => const RecurringPaymentsPage(),
-      ),
-    );
-  },
-),
-
-            GestureDetector(
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const TipsPage(),
-                  ),
-                );
-              },
-              child: const Text(
-                "💡",
-                style: TextStyle(fontSize: 26),
-              ),
-            ),
-
-            const SizedBox(width: 10),
-
-            IconButton(
-              icon: const Icon(Icons.logout),
-              onPressed: () async {
-                await FirebaseAuth.instance.signOut();
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (_) => const LoginPage()),
-                );
-              },
-            ),
-          ],
-        ),
-      ],
-    ),
-
     const SizedBox(height: 6),
 
     Text(
@@ -543,11 +540,11 @@ if (!history.contains(entry)) {
                     // ------------------- Spending Breakdown & Income vs Expense -------------------
                     if (hasExpense) ...[
                       const SizedBox(height: 20),
-                      Row(
+                      Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(
-                            child: Container(
+                          
+                             Container(
                               padding: const EdgeInsets.all(16),
                               decoration: BoxDecoration(
                                 color: Colors.white,
@@ -574,6 +571,7 @@ if (!history.contains(entry)) {
                                   const SizedBox(height: 12),
                                   SizedBox(
                                     height: 230,
+                                    child:Center(
                                     child: PieChart(
                                       PieChartData(
                                         centerSpaceRadius: 0,
@@ -636,14 +634,16 @@ if (!history.contains(entry)) {
                                       ),
                                     ),
                                   ),
+                                  ),
                                 ],
                               ),
                             ),
-                          ),
-                          const SizedBox(width: 16),
-                          Flexible(
-                            child: Container(
+                          
+                          const SizedBox(height: 16),
+            
+                             Container(
                               height: 300,
+                              width: double.infinity,
                               padding: const EdgeInsets.all(16),
                               decoration: BoxDecoration(
                                 color: Colors.white,
@@ -668,10 +668,9 @@ if (!history.contains(entry)) {
                                   ),
                                   const SizedBox(height: 12),
                                   Expanded(
-                                    child: SingleChildScrollView(
-                                      scrollDirection: Axis.horizontal,
-                                      child: SizedBox(
-                                        width: 900,
+                                    child:Center(
+                                    child: Padding(
+                                       padding: const EdgeInsets.symmetric(horizontal: 8),
                                         child: BarChart(
                                           BarChartData(
                                             maxY: getMaxY(),
@@ -679,11 +678,31 @@ if (!history.contains(entry)) {
                                             gridData: FlGridData(show: false),
                                             borderData: FlBorderData(show: false),
                                             titlesData: FlTitlesData(
+                                              rightTitles: AxisTitles(
+  sideTitles: SideTitles(showTitles: false),
+),
+topTitles: AxisTitles(
+  sideTitles: SideTitles(showTitles: false),
+),
                                               leftTitles: AxisTitles(
                                                 sideTitles: SideTitles(
                                                   showTitles: true,
-                                                  reservedSize: 50,
+                                                  reservedSize: 70,
                                                   interval: getMaxY() / 5,
+                                                  getTitlesWidget: (value, meta) {
+      String text;
+      if (value >= 1000) {
+        text = "${(value / 1000).toStringAsFixed(1)}K";
+      } else {
+        text = value.toInt().toString();
+      }
+
+      return Text(
+        text,
+        style: const TextStyle(fontSize: 11),
+        softWrap: false, // prevents line break
+      );
+    },
                                                 ),
                                               ),
                                               bottomTitles: AxisTitles(
@@ -707,13 +726,13 @@ if (!history.contains(entry)) {
                                             ),
                                           ),
                                         ),
-                                      ),
                                     ),
+                                    ), 
                                   ),
                                 ],
                               ),
                             ),
-                          ),
+              
                         ],
                       ),
                     ],
@@ -773,10 +792,8 @@ if (!history.contains(entry)) {
                 ),
               ),
             ),
-          ),
-        ],
-      ),
-    );
+          );
+    
   }
 
   // ------------------- Intro Card Widget -------------------

@@ -4,6 +4,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'widgets/side_nav.dart';
 import'package:flutter_fintracker/fintracker_bills.dart';
+import 'package:flutter_fintracker/fintracker_login.dart';
+import 'package:flutter_fintracker/recurring_payments.dart';
+import 'package:flutter_fintracker/previous_tips.dart';
 
 String formatCategory(String text) {
   if (text.isEmpty) return text;
@@ -53,14 +56,70 @@ class _BudgetPlannerScreenState extends State<BudgetPlannerScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Row(
-        children: [
-          SideNav(
+       appBar: AppBar(
+        backgroundColor: const Color(0xFF083549),
+        iconTheme: const IconThemeData(color: Colors.white),
+  elevation: 0,
+
+        title: const Text(
+          "Budget Planner",
+          style: TextStyle(
+            fontSize: 24,
+            color:Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+
+        actions: [
+
+    IconButton(
+      icon: const Icon(Icons.repeat, color: Colors.white),
+      tooltip: "Recurring Payments",
+      onPressed: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const RecurringPaymentsPage(),
+          ),
+        );
+      },
+    ),
+
+    IconButton(
+      icon: const Icon(Icons.lightbulb, color: Colors.yellow),
+      tooltip: "Finance Tips",
+      onPressed: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const TipsPage(),
+          ),
+        );
+      },
+    ),
+
+    IconButton(
+      icon: const Icon(Icons.logout, color: Colors.white),
+      tooltip: "Logout",
+      onPressed: () async {
+        await FirebaseAuth.instance.signOut();
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const LoginPage()),
+        );
+      },
+    ),
+
+  ],
+),
+      drawer: Drawer(  
+         child: SideNav(
             selectedIndex: selectedNavIndex,
             onItemTap: handleNavTap,
           ),
-          Expanded(
-            child: Container(
+      ),
+          
+            body:Container(
               padding: const EdgeInsets.all(20),
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
@@ -75,14 +134,6 @@ class _BudgetPlannerScreenState extends State<BudgetPlannerScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
-                        "Budget Planner",
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF083549),
-                        ),
-                      ),
                       ElevatedButton.icon(
                         onPressed: addBudgetGoal,
                         icon: const Icon(Icons.add),
@@ -124,7 +175,7 @@ class _BudgetPlannerScreenState extends State<BudgetPlannerScreen> {
                             Expanded(
                               child: GridView.builder(
                                 gridDelegate:
-                                    const SliverGridDelegateWithFixedCrossAxisCount(
+                                  SliverGridDelegateWithFixedCrossAxisCount(
                                   crossAxisCount: 3,
                                   mainAxisSpacing: 16,
                                   crossAxisSpacing: 16,
@@ -265,10 +316,7 @@ class _BudgetPlannerScreenState extends State<BudgetPlannerScreen> {
                 ],
               ),
             ),
-          ),
-        ],
-      ),
-    );
+          );
   }
 
   Widget _buildBudgetSummaryCard() {
@@ -418,7 +466,7 @@ final categories = categoryController.text.trim().toLowerCase();
     } else if (index == 1) {
       Navigator.pushReplacementNamed(context, '/transactions');
     } else if (index == 3) {
-      Navigator.pushReplacementNamed(context, '/profile');
+      Navigator.pushReplacementNamed(context, '/savings');
     }
     else if(index==4){
       Navigator.pushReplacementNamed(context, '/split');

@@ -7,6 +7,9 @@ import 'package:flutter_fintracker/fintracker_budget.dart';
 import 'package:flutter_fintracker/fintracker_home.dart';
 import 'package:flutter_fintracker/fintracker_transaction.dart';
 import 'add_bills.dart';
+import 'fintracker_login.dart';
+import 'previous_tips.dart';
+import 'recurring_payments.dart';
 
 class BillsPage extends StatefulWidget {
   const BillsPage({super.key});
@@ -31,18 +34,72 @@ class _BillsPageState extends State<BillsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: bgColor,
-      body: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SideNav(
+     appBar: AppBar(
+        backgroundColor: const Color(0xFF083549),
+        iconTheme: const IconThemeData(color: Colors.white),
+  elevation: 0,
+
+        title: const Text(
+          "Bills And Reminders",
+          style: TextStyle(
+            fontSize: 24,
+            color:Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+
+        actions: [
+
+    IconButton(
+      icon: const Icon(Icons.repeat, color: Colors.white),
+      tooltip: "Recurring Payments",
+      onPressed: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const RecurringPaymentsPage(),
+          ),
+        );
+      },
+    ),
+
+    IconButton(
+      icon: const Icon(Icons.lightbulb, color: Colors.yellow),
+      tooltip: "Finance Tips",
+      onPressed: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const TipsPage(),
+          ),
+        );
+      },
+    ),
+
+    IconButton(
+      icon: const Icon(Icons.logout, color: Colors.white),
+      tooltip: "Logout",
+      onPressed: () async {
+        await FirebaseAuth.instance.signOut();
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const LoginPage()),
+        );
+      },
+    ),
+
+  ],
+),
+      drawer: Drawer(
+          child:SideNav(
             selectedIndex: selectedNavIndex,
             onItemTap: handleNavTap,
           ),
+      ),
 
           /// ================= MAIN CONTENT =================
-          Expanded(
-            child: StreamBuilder<QuerySnapshot>(
+        
+            body: StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('bills')
                   .where('uid', isEqualTo: user!.uid)
@@ -137,16 +194,7 @@ if (alerts.isNotEmpty && !_alertShown) {
                               crossAxisAlignment:
                                   CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  "Bills & Reminders",
-                                  style: TextStyle(
-                                    fontSize: 28,
-                                    fontWeight:
-                                        FontWeight.bold,
-                                    color:
-                                        Color(0xFF083549),
-                                  ),
-                                ),
+                                
                                 SizedBox(height: 6),
                                 Text(
                                   "Manage your recurring payments",
@@ -191,21 +239,8 @@ if (alerts.isNotEmpty && !_alertShown) {
                                 ),
                                 const SizedBox(
                                     width: 12),
-                                IconButton(
-                                  icon: const Icon(
-                                      Icons.logout,
-                                      color:
-                                          primary),
-                                  onPressed:
-                                      () async {
-                                    await FirebaseAuth
-                                        .instance
-                                        .signOut();
-                                    Navigator.pushReplacementNamed(
-                                        context,
-                                        '/login');
-                                  },
-                                ),
+                              
+                                
                               ],
                             )
                           ],
@@ -313,10 +348,7 @@ if (alerts.isNotEmpty && !_alertShown) {
                 );
               },
             ),
-          ),
-        ],
-      ),
-    );
+          );
   }
 
   /// ================= NAVIGATION =================
@@ -355,7 +387,7 @@ if (alerts.isNotEmpty && !_alertShown) {
             context,
             MaterialPageRoute(
                 builder: (_) =>
-                    const SplitBillsScreen()));
+                    const SplitBillPage()));
         break;
       case 5:
         break;
