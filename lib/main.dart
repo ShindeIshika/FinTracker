@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_fintracker/fintracker_bills.dart';
 import 'package:flutter_fintracker/fintracker_budget.dart';
 import 'package:flutter_fintracker/fintracker_home.dart';
-//import 'fintracker_login.dart'; 
+import 'email_verification_screen.dart';
+//import 'fintracker_login.dart';
+import 'forgot_password_screen.dart'; 
 import 'package:firebase_core/firebase_core.dart'; // Firebase core
 import 'package:flutter_fintracker/fintracker_login.dart';
 import 'package:flutter_fintracker/fintracker_savings.dart';
@@ -40,6 +42,8 @@ class FinTrackerApp extends StatelessWidget {
     '/savings':(_)=> const SavingsPage(),
     '/split': (_) => const SplitBillPage(),
     '/bills': (_)=> const BillsPage(),
+    '/verify-email': (_) => const EmailVerificationScreen(),
+    '/forgot-password': (_) => const ForgotPasswordScreen(),
   },
   home: StreamBuilder<User?>(
     stream: FirebaseAuth.instance.authStateChanges(),

@@ -32,8 +32,8 @@ class _AddTransactionPageState extends State<AddTransactionPage> {
   
 
   bool _isRecurring = false;
-String _repeatType = 'weekly'; // daily / weekly / custom
-List<int> _selectedDays = [];
+final String _repeatType = 'weekly'; // daily / weekly / custom
+final List<int> _selectedDays = [];
 
 
   String _selectedCategory = '';
@@ -259,7 +259,7 @@ List<int> _selectedDays = [];
                 ],
               ),
               DropdownButtonFormField<String>(
-                value: _selectedCategory,
+                initialValue: _selectedCategory,
                 items: currentCategories
                     .toSet()
                     .map(
@@ -284,7 +284,7 @@ List<int> _selectedDays = [];
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
               DropdownButtonFormField<String>(
-                value: _selectedAccount,
+                initialValue: _selectedAccount,
                 items: accounts
                     .map(
                       (a) => DropdownMenuItem(

@@ -11,7 +11,6 @@ import 'package:flutter_fintracker/fintracker_login.dart';
 import 'package:flutter_fintracker/previous_tips.dart';
 import 'package:flutter_fintracker/recurring_payments.dart';
 import 'widgets/side_nav.dart';
-import  'split_bills_request_page.dart';
 
 class SavingsPage extends StatefulWidget {
   const SavingsPage({super.key});
@@ -149,7 +148,7 @@ class _SavingsPageState extends State<SavingsPage> {
                     ),
                     const SizedBox(height: 14),
                     DropdownButtonFormField<String>(
-                      value: selectedIcon,
+                      initialValue: selectedIcon,
                       decoration: const InputDecoration(
                         labelText: "Icon",
                       ),
@@ -350,57 +349,6 @@ class _SavingsPageState extends State<SavingsPage> {
           ),
         ),
         actions: [
-          StreamBuilder<QuerySnapshot>(
-  stream: _firestore
-      .collection("split_bill_requests")
-      .where("toUid", isEqualTo: _auth.currentUser?.uid)
-      .where("status", isEqualTo: "pending")
-      .snapshots(),
-  builder: (context, snapshot) {
-    final count = snapshot.data?.docs.length ?? 0;
-
-    return Stack(
-      children: [
-        IconButton(
-          icon: const Icon(Icons.notifications, color: Colors.white),
-          tooltip: "Split Bill Requests",
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => const SplitBillRequestsPage(),
-              ),
-            );
-          },
-        ),
-        if (count > 0)
-          Positioned(
-            right: 8,
-            top: 8,
-            child: Container(
-              padding: const EdgeInsets.all(4),
-              decoration: const BoxDecoration(
-                color: Colors.red,
-                shape: BoxShape.circle,
-              ),
-              constraints: const BoxConstraints(
-                minWidth: 18,
-                minHeight: 18,
-              ),
-              child: Text(
-                "$count",
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 10,
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ),
-      ],
-    );
-  },
-),
           IconButton(
             icon: const Icon(Icons.repeat, color: Colors.white),
             tooltip: "Recurring Payments",

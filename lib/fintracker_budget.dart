@@ -1,13 +1,14 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+// import 'package:firebase_auth/firebase_auth.dart';
+// import 'package:cloud_firestore/cloud_firestore.dart';
 import 'widgets/side_nav.dart';
 import 'package:flutter_fintracker/fintracker_bills.dart';
 import 'package:flutter_fintracker/fintracker_login.dart';
 import 'package:flutter_fintracker/recurring_payments.dart';
 import 'package:flutter_fintracker/previous_tips.dart';
-import 'split_bills_request_page.dart';
+import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 String formatCategory(String text) {
   if (text.isEmpty) return text;
@@ -80,57 +81,6 @@ class _BudgetPlannerScreenState extends State<BudgetPlannerScreen> {
           ),
         ),
         actions: [
-          StreamBuilder<QuerySnapshot>(
-  stream: _firestore
-      .collection("split_bill_requests")
-      .where("toUid", isEqualTo: _auth.currentUser?.uid)
-      .where("status", isEqualTo: "pending")
-      .snapshots(),
-  builder: (context, snapshot) {
-    final count = snapshot.data?.docs.length ?? 0;
-
-    return Stack(
-      children: [
-        IconButton(
-          icon: const Icon(Icons.notifications, color: Colors.white),
-          tooltip: "Split Bill Requests",
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => const SplitBillRequestsPage(),
-              ),
-            );
-          },
-        ),
-        if (count > 0)
-          Positioned(
-            right: 8,
-            top: 8,
-            child: Container(
-              padding: const EdgeInsets.all(4),
-              decoration: const BoxDecoration(
-                color: Colors.red,
-                shape: BoxShape.circle,
-              ),
-              constraints: const BoxConstraints(
-                minWidth: 18,
-                minHeight: 18,
-              ),
-              child: Text(
-                "$count",
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 10,
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ),
-      ],
-    );
-  },
-),
           IconButton(
             icon: const Icon(Icons.repeat, color: Colors.white),
             tooltip: "Recurring Payments",

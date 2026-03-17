@@ -128,7 +128,7 @@ class _AddEditBillPageState extends State<AddEditBillPage> {
                     const SizedBox(height: 8),
 
                     DropdownButtonFormField<String>(
-                      value: frequency,
+                      initialValue: frequency,
                       decoration: _dropdownDecoration(),
                       items: const [
                         DropdownMenuItem(
@@ -157,7 +157,7 @@ class _AddEditBillPageState extends State<AddEditBillPage> {
                     const SizedBox(height: 8),
 
                     DropdownButtonFormField<int>(
-                      value: interval,
+                      initialValue: interval,
                       decoration: _dropdownDecoration(),
                       items: List.generate(
                         12,

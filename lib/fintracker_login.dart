@@ -96,18 +96,49 @@ class _LoginPageState extends State<LoginPage> {
 
       print("🚀 Attempting FirebaseAuth login with: $emailToUse");
 
-      final user = await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: emailToUse,
-        password: password,
-      );
-
-      print("✅ Login successful for: ${user.user?.email}");
-      _showSnackbar('Login Successful! Welcome ${user.user?.email}');
+    String loginInput = loginIdController.text.trim();
+    String email;
+    
+    // 🔍 Step 1: Detect email or username
+    if (loginInput.contains('@')) {
+      email = loginInput.toLowerCase();
+    } else {
+      // 🔥 Step 2: Fetch email from Firestore using username
+      final query = await FirebaseFirestore.instance
+          .collection('users')
+          .where('username', isEqualTo: loginInput)
+          .get();
+    
+      if (query.docs.isEmpty) {
+        _showSnackbar("Username not found");
+        return;
+      }
+    
+      email = query.docs.first['email'];
+    }
+    
+    // 🔐 Step 3: Login with email
+    final userCredential = await FirebaseAuth.instance
+        .signInWithEmailAndPassword(
+      email: email,
+      password: passwordController.text.trim(),
+    );
+    
+    // ✅ NOW this will work
+    if (!userCredential.user!.emailVerified) {
+      _showSnackbar("Please verify your email before login (Check spam folder as well) ");
+    
+      await FirebaseAuth.instance.signOut();
+      return;
+    }
+    
+    // ✅ then navigate
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (context) => DashboardScreen()),
+    );  
       
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) =>  DashboardScreen()),
-      );
+
     } on FirebaseAuthException catch (e) {
       print("🔥 FirebaseAuthException: ${e.code} - ${e.message}");
       _showSnackbar(e.message ?? 'Login failed. Please try again.');
@@ -233,9 +264,22 @@ class _LoginPageState extends State<LoginPage> {
                         }
                         return null;
                       },
-                    ),
-                    const SizedBox(height: 30),
+                    ), // 👈 ADD BELOW THIS LINE
 
+                    SizedBox(height: 8),
+                    
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: () {
+                        Navigator.pushNamed(context, '/forgot-password');
+                      },
+                        child: Text("Forgot Password?"),
+                      ),
+                    ),
+
+                    
+                
                     // --- Login Button ---
                     SizedBox(
                       width: double.infinity,

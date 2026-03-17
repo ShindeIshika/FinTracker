@@ -14,6 +14,7 @@ class _RecurringPaymentsPageState
     extends State<RecurringPaymentsPage> {
   final user = FirebaseAuth.instance.currentUser;
 
+  // 🎨 Modern Fintech Colors
   static const Color backgroundColor = Color(0xFFF1F5F9);
   static const Color primaryColor = Color(0xFF0F172A);
   static const Color accentColor = Color(0xFF6366F1);
@@ -31,12 +32,12 @@ class _RecurringPaymentsPageState
           "Recurring Payments",
           style: TextStyle(
             fontWeight: FontWeight.bold,
-            fontSize: 18,
+            fontSize: 20,
             color: primaryColor,
           ),
         ),
       ),
-      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      body: StreamBuilder(
         stream: FirebaseFirestore.instance
             .collection('recurring_payments')
             .where('uid', isEqualTo: user!.uid)
@@ -50,23 +51,24 @@ class _RecurringPaymentsPageState
 
           final docs = snapshot.data!.docs;
 
-          final int active =
-              docs.where((d) => d.data()['isActive'] == true).length;
-          final int paused =
-              docs.where((d) => d.data()['isActive'] == false).length;
+          int active =
+              docs.where((d) => d['isActive'] == true).length;
+          int paused =
+              docs.where((d) => d['isActive'] == false).length;
 
           return ListView(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(20),
             children: [
               const Text(
                 "Manage your automated transactions",
                 style: TextStyle(
                   color: Colors.grey,
-                  fontSize: 13,
+                  fontSize: 14,
                 ),
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 24),
 
+              /// 🔹 STAT CARDS
               Row(
                 children: [
                   Expanded(
@@ -74,38 +76,28 @@ class _RecurringPaymentsPageState
                       "Active",
                       active.toString(),
                       const LinearGradient(
-                        colors: [
-                          Color.fromARGB(255, 12, 13, 94),
-                          Color.fromARGB(255, 8, 4, 87),
-                        ],
+                        colors: [Color.fromARGB(255, 12, 13, 94), Color.fromARGB(255, 8, 4, 87)],
                       ),
                     ),
                   ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 14),
                   Expanded(
                     child: _buildStatCard(
                       "Paused",
                       paused.toString(),
                       const LinearGradient(
-                        colors: [
-                          Color.fromARGB(255, 200, 31, 31),
-                          Color.fromARGB(255, 193, 22, 22),
-                        ],
+                        colors: [Color.fromARGB(255, 200, 31, 31), Color.fromARGB(255, 193, 22, 22)],
                       ),
                     ),
                   ),
                 ],
               ),
 
-              const SizedBox(height: 22),
+              const SizedBox(height: 30),
 
-              ...docs.map(
-                (doc) => _buildRecurringCard(
-                  context,
-                  doc.id,
-                  doc.data(),
-                ),
-              ),
+              /// 🔹 RECURRING LIST
+              ...docs.map((doc) => _buildRecurringCard(
+                  context, doc.id, doc.data())),
             ],
           );
         },
@@ -113,18 +105,20 @@ class _RecurringPaymentsPageState
     );
   }
 
+  /// ================== STAT CARD ==================
+
   Widget _buildStatCard(
       String title, String value, Gradient gradient) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: gradient,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(22),
         boxShadow: const [
           BoxShadow(
-            blurRadius: 10,
+            blurRadius: 14,
             color: Colors.black12,
-            offset: Offset(0, 4),
+            offset: Offset(0, 6),
           )
         ],
       ),
@@ -133,26 +127,26 @@ class _RecurringPaymentsPageState
         children: [
           Text(
             value,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
             style: const TextStyle(
-              fontSize: 22,
+              fontSize: 28,
               fontWeight: FontWeight.bold,
               color: Colors.white,
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 6),
           Text(
             title,
             style: const TextStyle(
               color: Colors.white70,
-              fontSize: 12,
+              fontSize: 14,
             ),
           ),
         ],
       ),
     );
   }
+
+  /// ================== RECURRING CARD ==================
 
   Widget _buildRecurringCard(
       BuildContext context,
@@ -165,7 +159,7 @@ class _RecurringPaymentsPageState
       "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"
     ];
 
-    final String daysText = days.isEmpty
+    String daysText = days.isEmpty
         ? "No days selected"
         : days.map((d) => dayNames[d - 1]).join(" • ");
 
@@ -173,41 +167,41 @@ class _RecurringPaymentsPageState
       duration: const Duration(milliseconds: 300),
       opacity: isActive ? 1.0 : 0.45,
       child: InkWell(
-        borderRadius: BorderRadius.circular(18),
-        onTap: () => _showEditDaysSheet(context, docId, days),
+        borderRadius: BorderRadius.circular(24),
+        onTap: () =>
+            _showEditDaysSheet(context, docId, days),
         child: Container(
-          margin: const EdgeInsets.only(bottom: 12),
-          padding: const EdgeInsets.all(14),
+          margin: const EdgeInsets.only(bottom: 18),
+          padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(24),
             boxShadow: const [
               BoxShadow(
-                blurRadius: 12,
+                blurRadius: 18,
                 color: Colors.black12,
-                offset: Offset(0, 5),
+                offset: Offset(0, 8),
               )
             ],
           ),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
+              /// 🔹 ICON
               Container(
-                padding: const EdgeInsets.all(10),
+                padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: const Color.fromARGB(255, 13, 15, 104)
-                      .withOpacity(0.12),
+                  color: const Color.fromARGB(255, 13, 15, 104).withOpacity(0.12),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
                   Icons.repeat,
                   color: Color.fromARGB(255, 13, 15, 104),
-                  size: 20,
                 ),
               ),
 
-              const SizedBox(width: 12),
+              const SizedBox(width: 18),
 
+              /// 🔹 DETAILS
               Expanded(
                 child: Column(
                   crossAxisAlignment:
@@ -215,31 +209,25 @@ class _RecurringPaymentsPageState
                   children: [
                     Text(
                       data['category'] ?? "No Category",
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
-                        fontSize: 15,
+                        fontSize: 16,
                         color: primaryColor,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      "₹${data['amount']}",
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
                       ),
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      daysText,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+                      "₹${data['amount']}",
                       style: const TextStyle(
-                        fontSize: 12,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      daysText,
+                      style: const TextStyle(
+                        fontSize: 13,
                         color: Colors.grey,
                       ),
                     ),
@@ -247,24 +235,20 @@ class _RecurringPaymentsPageState
                 ),
               ),
 
-              const SizedBox(width: 8),
-
-              Transform.scale(
-                scale: 0.9,
-                child: Switch(
-                  value: isActive,
-                  activeColor: const Color.fromARGB(255, 13, 15, 104),
-                  onChanged: (value) async {
-                    if (!value) {
-                      _showPauseDialog(context, docId);
-                    } else {
-                      await FirebaseFirestore.instance
-                          .collection('recurring_payments')
-                          .doc(docId)
-                          .update({'isActive': true});
-                    }
-                  },
-                ),
+              /// 🔹 TOGGLE
+              Switch(
+                value: isActive,
+                activeThumbColor: const Color.fromARGB(255, 13, 15, 104),
+                onChanged: (value) async {
+                  if (!value) {
+                    _showPauseDialog(context, docId);
+                  } else {
+                    await FirebaseFirestore.instance
+                        .collection('recurring_payments')
+                        .doc(docId)
+                        .update({'isActive': true});
+                  }
+                },
               ),
             ],
           ),
@@ -272,6 +256,8 @@ class _RecurringPaymentsPageState
       ),
     );
   }
+
+  /// ================== PAUSE DIALOG ==================
 
   void _showPauseDialog(
       BuildContext context,
@@ -281,16 +267,11 @@ class _RecurringPaymentsPageState
       builder: (context) {
         return AlertDialog(
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(20),
           ),
-          title: const Text(
-            "Pause Recurring Payment?",
-            style: TextStyle(fontSize: 18),
-          ),
+          title: const Text("Pause Recurring Payment?"),
           content: const Text(
-            "You can restart it anytime from this page.",
-            style: TextStyle(fontSize: 14),
-          ),
+              "You can restart it anytime from this page."),
           actions: [
             TextButton(
               child: const Text("Cancel"),
@@ -300,13 +281,14 @@ class _RecurringPaymentsPageState
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color.fromARGB(255, 13, 15, 104),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius:
+                      BorderRadius.circular(12),
                 ),
               ),
-              child: const Text(
-                "Pause",
-                style: TextStyle(color: Colors.white),
+              child: const Text("Pause", 
+              style: TextStyle(color: Colors.white),
               ),
+              
               onPressed: () async {
                 await FirebaseFirestore.instance
                     .collection('recurring_payments')
@@ -322,6 +304,8 @@ class _RecurringPaymentsPageState
     );
   }
 
+  /// ================== EDIT DAYS SHEET ==================
+
   void _showEditDaysSheet(
       BuildContext context,
       String docId,
@@ -331,21 +315,15 @@ class _RecurringPaymentsPageState
 
     showModalBottomSheet(
       context: context,
-      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius:
-            BorderRadius.vertical(top: Radius.circular(24)),
+            BorderRadius.vertical(top: Radius.circular(30)),
       ),
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setState) {
             return Padding(
-              padding: EdgeInsets.only(
-                left: 18,
-                right: 18,
-                top: 18,
-                bottom: MediaQuery.of(context).viewInsets.bottom + 18,
-              ),
+              padding: const EdgeInsets.all(24),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment:
@@ -354,45 +332,35 @@ class _RecurringPaymentsPageState
                   const Text(
                     "Edit Recurring Days",
                     style: TextStyle(
-                      fontSize: 17,
+                      fontSize: 18,
                       fontWeight: FontWeight.bold,
                       color: primaryColor,
                     ),
                   ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 24),
 
                   Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
+                    spacing: 10,
+                    runSpacing: 10,
                     children: List.generate(7, (index) {
                       final dayNumber = index + 1;
                       final dayName = [
-                        "Mon",
-                        "Tue",
-                        "Wed",
-                        "Thu",
-                        "Fri",
-                        "Sat",
-                        "Sun"
+                        "Mon","Tue","Wed","Thu",
+                        "Fri","Sat","Sun"
                       ][index];
 
                       final isSelected =
                           selectedDays.contains(dayNumber);
 
                       return ChoiceChip(
-                        label: Text(
-                          dayName,
-                          style: const TextStyle(fontSize: 12),
-                        ),
+                        label: Text(dayName),
                         selected: isSelected,
                         selectedColor:
                             accentColor.withOpacity(0.2),
                         onSelected: (selected) {
                           setState(() {
                             if (selected) {
-                              if (!selectedDays.contains(dayNumber)) {
-                                selectedDays.add(dayNumber);
-                              }
+                              selectedDays.add(dayNumber);
                             } else {
                               selectedDays.remove(dayNumber);
                             }
@@ -402,7 +370,7 @@ class _RecurringPaymentsPageState
                     }),
                   ),
 
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 24),
 
                   SizedBox(
                     width: double.infinity,
@@ -411,18 +379,16 @@ class _RecurringPaymentsPageState
                         backgroundColor: accentColor,
                         shape: RoundedRectangleBorder(
                           borderRadius:
-                              BorderRadius.circular(14),
+                              BorderRadius.circular(16),
                         ),
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 13,
-                        ),
+                        padding:
+                            const EdgeInsets.symmetric(
+                                vertical: 14),
                       ),
                       child: const Text(
                         "Save Changes",
                         style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
+                            fontWeight: FontWeight.bold, color: Colors.white),
                       ),
                       onPressed: () async {
                         await FirebaseFirestore.instance

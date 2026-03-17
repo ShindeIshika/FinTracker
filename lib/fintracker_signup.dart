@@ -72,6 +72,9 @@ class _FintrackerSignUpState extends State<FintrackerSignUp> {
         password: passwordController.text.trim(),
       );
 
+      // ✅ STEP 2.1: Send verification email
+      await userCredential.user!.sendEmailVerification();
+
       // Step 3: Store user data in Firestore
       await _db.collection('users').doc(userCredential.user!.uid).set({
         'firstName': firstName.text.trim(),
