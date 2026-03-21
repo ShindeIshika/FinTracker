@@ -902,6 +902,152 @@ class _SplitBillPageState extends State<SplitBillPage> {
     }
   }
 
+void _showBillDetailSheet(
+  BuildContext context,
+  Map<String, dynamic> bill,
+  String billId,
+  String currentUid,
+) {
+  final participants = _getParticipants(bill);
+  final total = _getTotal(bill);
+  final share = _sharePerPerson(bill);
+  final settlements = calculateSettlements(bill);
+  final settlements2 = Map<String, dynamic>.from(bill["userSettlements"] ?? {});
+
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
+    builder: (_) => DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.6,
+      maxChildSize: 0.92,
+      builder: (_, controller) => ListView(
+        controller: controller,
+        padding: const EdgeInsets.all(20),
+        children: [
+          Center(
+            child: Container(
+              width: 40, height: 4,
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          Text(
+            bill["title"] ?? "Untitled",
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            "Total: ${_money(total)}  •  ${participants.length} people  •  ${_money(share)} each",
+            style: const TextStyle(color: Colors.grey, fontSize: 13),
+          ),
+          const Divider(height: 24),
+          const Text("Participants", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+          const SizedBox(height: 10),
+          ...participants.map((p) {
+            final paid = ((p["paid"] ?? 0) as num).toDouble();
+            final balance = paid - share;
+            final name = _firstNameFromParticipant(p);
+            final uid = (p["uid"] ?? "").toString();
+            final status = settlements2[uid]?["status"]?.toString();
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.grey.shade200),
+              ),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 18,
+                    backgroundColor: const Color(0xFF083549).withOpacity(0.1),
+                    child: Text(
+                      name.isNotEmpty ? name[0].toUpperCase() : "?",
+                      style: const TextStyle(
+                        color: Color(0xFF083549),
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(name, style: const TextStyle(fontWeight: FontWeight.w600)),
+                        Text(
+                          "Paid: ${_money(paid)}",
+                          style: const TextStyle(fontSize: 12, color: Colors.grey),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        balance >= 0
+                            ? "+ ${_money(balance)}"
+                            : "- ${_money(-balance)}",
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: balance >= 0 ? Colors.green : Colors.red,
+                        ),
+                      ),
+                      if (status != null)
+                        Container(
+                          margin: const EdgeInsets.only(top: 4),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: status == "paid"
+                                ? Colors.red.withOpacity(0.1)
+                                : Colors.green.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            status == "paid" ? "Paid" : "Received",
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: status == "paid" ? Colors.red : Colors.green,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          }),
+          if (settlements.isNotEmpty) ...[
+            const Divider(height: 24),
+            const Text("Who Owes Who", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+            const SizedBox(height: 10),
+            ...settlements.map((s) => Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                children: [
+                  const Icon(Icons.arrow_forward, size: 16, color: Colors.deepPurple),
+                  const SizedBox(width: 8),
+                  Text(s, style: const TextStyle(color: Colors.deepPurple)),
+                ],
+              ),
+            )),
+          ],
+        ],
+      ),
+    ),
+  );
+}
   Widget balanceCard(String label, double amount, Color color) {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -1174,7 +1320,9 @@ class _SplitBillPageState extends State<SplitBillPage> {
                     final canMarkReceived =
                         myBalance > 0.01 && myStatus != "received";
 
-                    return Card(
+return GestureDetector(
+  onTap: () => _showBillDetailSheet(context, bill, docs[index].id, currentUid),
+                    child:  Card(
                       margin: const EdgeInsets.all(10),
                       child: ListTile(
                         title: Text(bill["title"] ?? "Untitled"),
@@ -1259,6 +1407,7 @@ class _SplitBillPageState extends State<SplitBillPage> {
                           ],
                         ),
                       ),
+                    ),
                     );
                   },
                 ),

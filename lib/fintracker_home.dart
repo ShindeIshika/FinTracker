@@ -48,7 +48,7 @@ final Map<String, Color> categoryColors = {
   'General': const Color.fromARGB(255, 151, 23, 106),
 };
 
-enum PieChartFilter { monthly, yearly }
+enum PieChartMode { month, year }
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -61,7 +61,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  bool _tipShown = false;
+  bool _tipShownThisSession = false;
 
   int selectedNavIndex = 0;
   int touchedPieIndex = -1;
@@ -70,6 +70,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   double totalIncome = 0;
   double totalExpense = 0;
   double totalBalance = 0;
+  double monthlyIncome = 0;
+double monthlyExpense = 0;
 
   List<Map<String, dynamic>> recentTransactions = [];
   List<Map<String, dynamic>> allTransactions = [];
@@ -77,46 +79,72 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool hasIncome = false;
   bool hasExpense = false;
 
-  PieChartFilter selectedPieFilter = PieChartFilter.monthly;
+PieChartMode selectedPieMode = PieChartMode.month;
+int selectedPieMonth = DateTime.now().month;
+int selectedPieYear = DateTime.now().year;
 
   String get pieChartTitle {
-    return selectedPieFilter == PieChartFilter.monthly
-        ? "Spending Breakdown (This Month)"
-        : "Spending Breakdown (This Year)";
+  const months = ['Jan','Feb','Mar','Apr','May','Jun',
+                  'Jul','Aug','Sep','Oct','Nov','Dec'];
+  if (selectedPieMode == PieChartMode.month) {
+    return "Spending – ${months[selectedPieMonth - 1]} $selectedPieYear";
+  } else {
+    return "Spending – Year $selectedPieYear";
   }
+}
+  Future<void> showLoginTipIfNeeded() async {
+  if (_tipShownThisSession) return;
 
-  Future<void> showTipOfTheDay() async {
-    if (_tipShown) return;
+  final user = _auth.currentUser;
+  if (user == null) return;
 
-    final user = _auth.currentUser;
-    if (user == null) return;
+  _tipShownThisSession = true;
 
-    _tipShown = true;
-
-    final today = DateTime.now().toIso8601String().split('T').first;
-
-    final dayIndex = DateTime.now().difference(DateTime(2024)).inDays;
-    final tipIndex = dayIndex % financeTips.length;
-    final todayTip = financeTips[tipIndex];
-
-    final String docId = "${today}_${todayTip['term']!.replaceAll(' ', '_')}";
-
-    final tipDocRef = _firestore
+  try {
+    final previousTipsRef = _firestore
         .collection('users')
         .doc(user.uid)
-        .collection('previous_tips')
-        .doc(docId);
+        .collection('previous_tips');
 
-    final tipDoc = await tipDocRef.get();
+    final previousTipsSnapshot = await previousTipsRef.get();
 
-    if (!tipDoc.exists) {
-      await tipDocRef.set({
-        'date': today,
-        'term': todayTip['term'],
-        'tip': todayTip['tip'],
+    final Set<String> shownTerms = previousTipsSnapshot.docs
+        .map((doc) {
+          final data = doc.data();
+          return (data['term'] ?? '').toString().trim();
+        })
+        .where((term) => term.isNotEmpty)
+        .toSet();
+
+    final List<Map<String, String>> unseenTips = financeTips.where((tip) {
+      final term = (tip['term'] ?? '').trim();
+      return !shownTerms.contains(term);
+    }).toList();
+
+    if (unseenTips.isEmpty) {
+      return; // all tips already shown, so do nothing
+    }
+
+    final Map<String, String> selectedTip =
+        unseenTips[Random().nextInt(unseenTips.length)];
+
+    final String term = selectedTip['term'] ?? '';
+    final String tip = selectedTip['tip'] ?? '';
+
+    final String docId = term.replaceAll(' ', '_').toLowerCase();
+
+    final existingDoc = await previousTipsRef.doc(docId).get();
+
+    if (!existingDoc.exists) {
+      await previousTipsRef.doc(docId).set({
+        'term': term,
+        'tip': tip,
+        'date': DateTime.now().toIso8601String().split('T').first,
         'shownAt': FieldValue.serverTimestamp(),
       });
     }
+
+    if (!mounted) return;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -125,28 +153,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
         context: context,
         barrierDismissible: true,
         builder: (_) => AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           title: Text(
-            "💡 ${todayTip['term']}",
+            "💡 $term",
             style: const TextStyle(fontWeight: FontWeight.bold),
           ),
-          content: Text(todayTip['tip']!),
+          content: Text(tip),
           actions: [
             TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
+              onPressed: () => Navigator.of(context).pop(),
               child: const Text("Got it"),
             ),
           ],
         ),
       );
     });
+  } catch (e) {
+    debugPrint("Error showing login tip: $e");
   }
+}
 
   @override
   void initState() {
     super.initState();
-    showTipOfTheDay();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+  showLoginTipIfNeeded();
+});
     fetchDashboardData();
     fetchUserName();
     _generateRecurringTransactions();
@@ -255,81 +289,93 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> fetchDashboardData() async {
-    final user = _auth.currentUser;
-    if (user == null) return;
+  final user = _auth.currentUser;
+  if (user == null) return;
 
-    double income = 0;
-    double expense = 0;
+  double income = 0;
+  double expense = 0;
+  double mIncome = 0;   // 👈 monthly
+  double mExpense = 0;  // 👈 monthly
 
-    final snapshot = await _firestore
-        .collection('transactions')
-        .where('uid', isEqualTo: user.uid)
-        .get();
+  final now = DateTime.now();
 
-    List<Map<String, dynamic>> tempList = [];
+  final snapshot = await _firestore
+      .collection('transactions')
+      .where('uid', isEqualTo: user.uid)
+      .get();
 
-    for (var doc in snapshot.docs) {
-      final data = doc.data();
+  List<Map<String, dynamic>> tempList = [];
 
-      if (data['type'] == 'income') {
-        income += (data['amount'] as num).toDouble();
-      } else if (data['type'] == 'expense') {
-        expense += (data['amount'] as num).toDouble();
-      }
+  for (var doc in snapshot.docs) {
+    final data = doc.data();
+    final amount = (data['amount'] as num).toDouble();
+    final type = data['type'];
 
-      if (data['date'] != null && data['date'] is Timestamp) {
-        tempList.add(data);
-      }
+    // All-time totals (for balance)
+    if (type == 'income') {
+      income += amount;
+    } else if (type == 'expense') {
+      expense += amount;
     }
 
-    tempList.sort((a, b) {
-      final aDate = a['date'] as Timestamp;
-      final bDate = b['date'] as Timestamp;
-      return bDate.compareTo(aDate);
-    });
-
-    if (!mounted) return;
-
-    setState(() {
-      totalIncome = income;
-      totalExpense = expense;
-      totalBalance = income - expense;
-      allTransactions = tempList;
-      recentTransactions = tempList.take(8).toList();
-      hasIncome = income > 0;
-      hasExpense = expense > 0;
-    });
+    // Monthly totals
+    if (data['date'] != null && data['date'] is Timestamp) {
+      final txDate = (data['date'] as Timestamp).toDate();
+      if (txDate.year == now.year && txDate.month == now.month) {
+        if (type == 'income') mIncome += amount;
+        else if (type == 'expense') mExpense += amount;
+      }
+      tempList.add(data);
+    }
   }
+
+  tempList.sort((a, b) {
+    final aDate = a['date'] as Timestamp;
+    final bDate = b['date'] as Timestamp;
+    return bDate.compareTo(aDate);
+  });
+
+  if (!mounted) return;
+
+  setState(() {
+    totalIncome = income;
+    totalExpense = expense;
+    totalBalance = income - expense;
+    monthlyIncome = mIncome;    // 👈
+    monthlyExpense = mExpense;  // 👈
+    allTransactions = tempList;
+    recentTransactions = tempList.take(8).toList();
+    hasIncome = income > 0;
+    hasExpense = expense > 0;
+  });
+}
 
   Map<String, double> getCategoryTotals() {
-    Map<String, double> categoryTotals = {};
-    final now = DateTime.now();
+  Map<String, double> categoryTotals = {};
 
-    for (var tx in allTransactions) {
-      if (tx['type'] != 'expense') continue;
-      if (tx['date'] == null || tx['date'] is! Timestamp) continue;
+  for (var tx in allTransactions) {
+    if (tx['type'] != 'expense') continue;
+    if (tx['date'] == null || tx['date'] is! Timestamp) continue;
 
-      final txDate = (tx['date'] as Timestamp).toDate();
+    final txDate = (tx['date'] as Timestamp).toDate();
 
-      bool includeTransaction = false;
-
-      if (selectedPieFilter == PieChartFilter.monthly) {
-        includeTransaction =
-            txDate.year == now.year && txDate.month == now.month;
-      } else {
-        includeTransaction = txDate.year == now.year;
-      }
-
-      if (!includeTransaction) continue;
-
-      String category = tx['category'].toString().trim();
-      double amount = (tx['amount'] as num).toDouble();
-
-      categoryTotals[category] = (categoryTotals[category] ?? 0) + amount;
+    bool include = false;
+    if (selectedPieMode == PieChartMode.month) {
+      include = txDate.year == selectedPieYear &&
+                txDate.month == selectedPieMonth;
+    } else {
+      include = txDate.year == selectedPieYear;
     }
 
-    return categoryTotals;
+    if (!include) continue;
+
+    final category = tx['category'].toString().trim();
+    final amount = (tx['amount'] as num).toDouble();
+    categoryTotals[category] = (categoryTotals[category] ?? 0) + amount;
   }
+
+  return categoryTotals;
+}
 
   Map<int, Map<String, double>> getMonthlyIncomeExpense() {
     Map<int, Map<String, double>> monthlyData = {};
@@ -526,39 +572,41 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               const SizedBox(height: 20),
 
-              Row(
-                children: [
-                  Expanded(
-                    child: _statCard(
-                      title: "Total Balance",
-                      amount: "₹ ${totalBalance.toStringAsFixed(0)}",
-                      icon: Icons.account_balance_wallet,
-                      iconColor: Colors.blue,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _statCard(
-                      title: "Income",
-                      amount: "₹ ${totalIncome.toStringAsFixed(0)}",
-                      icon: Icons.trending_up,
-                      iconColor: Colors.green,
-                      amountColor: const Color.fromARGB(255, 2, 135, 7),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _statCard(
-                      title: "Expenses",
-                      amount: "₹ ${totalExpense.toStringAsFixed(0)}",
-                      icon: Icons.trending_down,
-                      iconColor: Colors.red,
-                      amountColor: const Color.fromARGB(255, 194, 21, 9),
-                    ),
-                  ),
-                ],
-              ),
-
+             Row(
+  children: [
+    Expanded(
+      child: _statCard(
+        title: "Total Balance",
+        amount: "₹ ${totalBalance.toStringAsFixed(0)}",
+        subtitle: "All time",                          // 👈
+        icon: Icons.account_balance_wallet,
+        iconColor: Colors.blue,
+      ),
+    ),
+    const SizedBox(width: 8),
+    Expanded(
+      child: _statCard(
+        title: "Income",
+        amount: "₹ ${monthlyIncome.toStringAsFixed(0)}", // 👈 monthly
+        subtitle: "This month",                          // 👈
+        icon: Icons.trending_up,
+        iconColor: Colors.green,
+        amountColor: const Color.fromARGB(255, 2, 135, 7),
+      ),
+    ),
+    const SizedBox(width: 8),
+    Expanded(
+      child: _statCard(
+        title: "Expenses",
+        amount: "₹ ${monthlyExpense.toStringAsFixed(0)}", // 👈 monthly
+        subtitle: "This month",                           // 👈
+        icon: Icons.trending_down,
+        iconColor: Colors.red,
+        amountColor: const Color.fromARGB(255, 194, 21, 9),
+      ),
+    ),
+  ],
+),
               const SizedBox(height: 20),
 
               Container(
@@ -676,34 +724,94 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   color: Colors.grey.shade100,
                                   borderRadius: BorderRadius.circular(10),
                                 ),
-                                child: DropdownButtonHideUnderline(
-                                  child: DropdownButton<PieChartFilter>(
-                                    value: selectedPieFilter,
-                                    icon: const Icon(Icons.keyboard_arrow_down),
-                                    style: const TextStyle(
-                                      color: Color(0xFF083549),
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                    items: const [
-                                      DropdownMenuItem(
-                                        value: PieChartFilter.monthly,
-                                        child: Text("Monthly"),
-                                      ),
-                                      DropdownMenuItem(
-                                        value: PieChartFilter.yearly,
-                                        child: Text("Yearly"),
-                                      ),
-                                    ],
-                                    onChanged: (value) {
-                                      if (value == null) return;
-                                      setState(() {
-                                        selectedPieFilter = value;
-                                        touchedPieIndex = -1;
-                                      });
-                                    },
-                                  ),
-                                ),
+                                child: // REMOVE the old DropdownButtonHideUnderline(...) container
+// REPLACE with:
+
+Row(
+  mainAxisSize: MainAxisSize.min,
+  children: [
+    // Month / Year toggle
+    Container(
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _filterToggle("Month", selectedPieMode == PieChartMode.month, () {
+            setState(() {
+              selectedPieMode = PieChartMode.month;
+              touchedPieIndex = -1;
+            });
+          }),
+          _filterToggle("Year", selectedPieMode == PieChartMode.year, () {
+            setState(() {
+              selectedPieMode = PieChartMode.year;
+              touchedPieIndex = -1;
+            });
+          }),
+        ],
+      ),
+    ),
+    const SizedBox(width: 8),
+
+    // Month picker (only when mode is Month)
+    if (selectedPieMode == PieChartMode.month)
+      DropdownButtonHideUnderline(
+        child: DropdownButton<int>(
+          value: selectedPieMonth,
+          style: const TextStyle(
+            color: Color(0xFF083549),
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
+          items: List.generate(12, (i) {
+            const m = ['Jan','Feb','Mar','Apr','May','Jun',
+                       'Jul','Aug','Sep','Oct','Nov','Dec'];
+            return DropdownMenuItem(
+              value: i + 1,
+              child: Text(m[i]),
+            );
+          }),
+          onChanged: (value) {
+            if (value == null) return;
+            setState(() {
+              selectedPieMonth = value;
+              touchedPieIndex = -1;
+            });
+          },
+        ),
+      ),
+
+    // Year picker (always visible)
+    const SizedBox(width: 8),
+    DropdownButtonHideUnderline(
+      child: DropdownButton<int>(
+        value: selectedPieYear,
+        style: const TextStyle(
+          color: Color(0xFF083549),
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+        ),
+        items: List.generate(5, (i) {
+          final year = DateTime.now().year - i;
+          return DropdownMenuItem(
+            value: year,
+            child: Text("$year"),
+          );
+        }),
+        onChanged: (value) {
+          if (value == null) return;
+          setState(() {
+            selectedPieYear = value;
+            touchedPieIndex = -1;
+          });
+        },
+      ),
+    ),
+  ],
+),
                               ),
                             ],
                           ),
@@ -1010,59 +1118,86 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _statCard({
-    required String title,
-    required String amount,
-    required IconData icon,
-    required Color iconColor,
-    Color? amountColor,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(12),
+Widget _filterToggle(String label, bool isActive, VoidCallback onTap) {
+  return GestureDetector(
+    onTap: onTap,
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: const [
-          BoxShadow(
-            color: Colors.black12,
-            blurRadius: 8,
-            offset: Offset(0, 3),
-          )
-        ],
+        color: isActive ? const Color(0xFF083549) : Colors.transparent,
+        borderRadius: BorderRadius.circular(10),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          CircleAvatar(
-            radius: 16,
-            backgroundColor: iconColor.withOpacity(0.18),
-            child: Icon(icon, color: iconColor, size: 18),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontSize: 12,
-              color: Colors.blueGrey,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            amount,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: amountColor ?? const Color(0xFF083549),
-            ),
-          ),
-        ],
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: isActive ? Colors.white : Colors.grey,
+        ),
       ),
-    );
-  }
+    ),
+  );
+}
+
+ Widget _statCard({
+  required String title,
+  required String amount,
+  required String subtitle,       // 👈 add this
+  required IconData icon,
+  required Color iconColor,
+  Color? amountColor,
+}) {
+  return Container(
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(14),
+      boxShadow: const [
+        BoxShadow(
+          color: Colors.black12,
+          blurRadius: 8,
+          offset: Offset(0, 3),
+        )
+      ],
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        CircleAvatar(
+          radius: 16,
+          backgroundColor: iconColor.withOpacity(0.18),
+          child: Icon(icon, color: iconColor, size: 18),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 12, color: Colors.blueGrey),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          amount,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: amountColor ?? const Color(0xFF083549),
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          subtitle,                // 👈 show subtitle
+          style: const TextStyle(
+            fontSize: 10,
+            color: Colors.grey,
+          ),
+        ),
+      ],
+    ),
+  );
+}
 
   Widget _quickActionButton({
     required IconData icon,

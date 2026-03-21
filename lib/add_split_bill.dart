@@ -21,6 +21,17 @@ class _AddSplitBillPageState extends State<AddSplitBillPage> {
   final TextEditingController titleController = TextEditingController();
   final TextEditingController totalController = TextEditingController();
 
+  // ADD these new variables:
+final List<Map<String, dynamic>> billItems = [];
+final TextEditingController itemNameController = TextEditingController();
+final TextEditingController itemAmountController = TextEditingController();
+
+// Computed total from items (or manual if no items)
+double get _computedTotal {
+  if (billItems.isEmpty) return double.tryParse(totalController.text.trim()) ?? 0;
+  return billItems.fold(0.0, (sum, item) => sum + (item["amount"] as double));
+}
+
   List<Map<String, dynamic>> participants = [];
 
   String _extractFirstName(Map<String, dynamic> data) {
@@ -432,6 +443,7 @@ class _AddSplitBillPageState extends State<AddSplitBillPage> {
         child: Column(
           children: [
             TextField(
+              
               controller: titleController,
               decoration: const InputDecoration(
                 labelText: "Bill Title",

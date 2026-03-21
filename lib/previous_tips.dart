@@ -42,11 +42,11 @@ class _TipsPageState extends State<TipsPage> {
       ),
       body: StreamBuilder<QuerySnapshot>(
         stream: _firestore
-            .collection('users')
-            .doc(user.uid)
-            .collection('previous_tips')
-            .orderBy('date', descending: true)
-            .snapshots(),
+    .collection('users')
+    .doc(user.uid)
+    .collection('previous_tips')
+    .orderBy('shownAt', descending: true)
+    .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());

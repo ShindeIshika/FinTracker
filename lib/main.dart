@@ -12,7 +12,7 @@ import 'package:flutter_fintracker/fintracker_splitbill.dart';
 import 'package:flutter_fintracker/fintracker_transaction.dart';
 import 'firebase_options.dart'; 
 import 'package:firebase_auth/firebase_auth.dart';// correct file name
-// import your page widgets
+import 'notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized(); // Ensures Flutter is ready

@@ -7,7 +7,7 @@ class EmptyDashboardIntro extends StatelessWidget {
   const EmptyDashboardIntro({
     super.key,
     required this.onAddIncome,
-    required this.onAddExpensSe,
+    required this.onAddExpense,
   });
 
   @override
