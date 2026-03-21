@@ -165,6 +165,7 @@ Future<void> showCreateBudgetDialog({
               if (newCategory.isEmpty) return;
 
               final added = CategoryService.addCategory(newCategory);
+              CategoryService.notifier.notifyListeners(); // Ensure Expenses Page is updated
 
               if (!added) {
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -218,39 +219,38 @@ Future<void> showCreateBudgetDialog({
                     const SizedBox(height: 8),
 
                     // Category Dropdown
-                    ValueListenableBuilder<List<String>>(
-                      valueListenable: CategoryService.notifier,
-                      builder: (context, categories, _) {
-                        final uniqueCategories = categories.toSet().toList(); // 🔥 remove duplicates
+ValueListenableBuilder<List<String>>(
+  valueListenable: CategoryService.notifier,
+  builder: (context, categories, _) {
+    final uniqueCategories = categories.toSet().toList();  // Remove duplicates
 
-                        if (uniqueCategories.isEmpty) {
-                          return const Text("No categories available");
-                        }
+    if (uniqueCategories.isEmpty) {
+      return const Text("No categories available");
+    }
 
-                        // 🔥 Ensure selected value is VALID
-                        if (!uniqueCategories.contains(selectedCategory)) {
-                          selectedCategory = uniqueCategories.first;
-                        }
+    if (!uniqueCategories.contains(selectedCategory)) {
+      selectedCategory = uniqueCategories.first;
+    }
 
-                        return DropdownButtonFormField<String>(
-                          value: selectedCategory,
-                          items: uniqueCategories.map((cat) {
-                            return DropdownMenuItem(
-                              value: cat,
-                              child: Text(
-                                cat[0].toUpperCase() + cat.substring(1),
-                              ),
-                            );
-                          }).toList(),
-                          onChanged: (value) {
-                            setStateDialog(() {
-                              selectedCategory = value!;
-                            });
-                          },
-                          decoration: const InputDecoration(labelText: "Category"),
-                        );
-                      }
-                    ),
+    return DropdownButtonFormField<String>(
+      value: selectedCategory,
+      items: uniqueCategories.map((cat) {
+        return DropdownMenuItem(
+          value: cat,
+          child: Text(
+            cat[0].toUpperCase() + cat.substring(1),  // Capitalize category name
+          ),
+        );
+      }).toList(),
+      onChanged: (value) {
+        setStateDialog(() {
+          selectedCategory = value!;
+        });
+      },
+      decoration: const InputDecoration(labelText: "Category"),
+    );
+  },
+)
                     const SizedBox(height: 8),
 
                     // Amount

@@ -252,7 +252,7 @@ class _BudgetPlannerScreenState extends State<BudgetPlannerScreen> {
                                               CrossAxisAlignment.start,
                                           children: [
                                             Text(
-                                              formatCategory(data['category']),
+                                              formatCategory(data['name'] ?? data['category']),
                                               maxLines: 1,
                                               overflow: TextOverflow.ellipsis,
                                               style: const TextStyle(
@@ -416,8 +416,11 @@ class _BudgetPlannerScreenState extends State<BudgetPlannerScreen> {
 
 Future<void> addBudgetGoal() async {
   final limitController = TextEditingController();
+  final nameController = TextEditingController(); // ✅ NEW
   final categories = CategoryService.getAll();
-  String? selectedCategory = categories.isNotEmpty ? categories.first : null;
+
+  String? selectedCategory =
+      categories.isNotEmpty ? categories.first : null;
 
   await showDialog(
     context: context,
@@ -426,79 +429,51 @@ Future<void> addBudgetGoal() async {
         builder: (context, setStateDialog) {
           return AlertDialog(
             title: const Text("Add Budget Goal"),
-
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-
-                // ✅ DROPDOWN
-                DropdownButtonFormField<String>(
-                  value: selectedCategory,
-                  items: categories.map((cat) => DropdownMenuItem(
-                    value: cat,
-                    child: Text(cat),
-                  )).toList(),
-                  onChanged: (value) {
-                    setStateDialog(() {
-                      selectedCategory = value;
-                    });
-                  },
-                  decoration: const InputDecoration(labelText: "Category"),
+                // ✅ NAME FIELD
+                TextField(
+                  controller: nameController,
+                  decoration: const InputDecoration(
+                    labelText: "Name (optional)",
+                    hintText: "e.g. Monthly Food Budget",
+                  ),
                 ),
-
                 const SizedBox(height: 10),
 
-                // ✅ ADD CATEGORY BUTTON
-                TextButton(
-                  onPressed: () async {
-                    final controller = TextEditingController();
+                // ✅ CATEGORY DROPDOWN
+                ValueListenableBuilder<List<String>>(
+                  valueListenable: CategoryService.notifier,
+                  builder: (context, categories, _) {
+                    if (categories.isEmpty) {
+                      return const Text("No categories available");
+                    }
 
-                    await showDialog(
-                      context: context,
-                      builder: (_) => AlertDialog(
-                        title: const Text("Add Category"),
-                        content: TextField(
-                          controller: controller,
-                          decoration: const InputDecoration(
-                            hintText: "Enter category",
-                          ),
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(context),
-                            child: const Text("Cancel"),
-                          ),
-                          ElevatedButton(
-                            onPressed: () {
-                              final added = CategoryService.addCategory(controller.text.trim());
+                    if (selectedCategory == null ||
+                        !categories.contains(selectedCategory)) {
+                      selectedCategory = categories.first;
+                    }
 
-                              if (!added) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text("Category already exists")),
-                                );
-                                return;
-                              }
-
-                              Navigator.pop(context);
-
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text("Category added to Expenses ✅"),
-                                ),
-                              );
-
-                              // 🔥 refresh dropdown AND select the new category
-                              setStateDialog(() {
-                                selectedCategory = controller.text.trim();
-                              });
-                            },
-                            child: const Text("Add"),
-                          ),
-                        ],
-                      ),
+                    return DropdownButtonFormField<String>(
+                      value: selectedCategory,
+                      items: categories
+                          .map(
+                            (cat) => DropdownMenuItem(
+                              value: cat,
+                              child: Text(cat),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (value) {
+                        setStateDialog(() {
+                          selectedCategory = value;
+                        });
+                      },
+                      decoration:
+                          const InputDecoration(labelText: "Category"),
                     );
                   },
-                  child: const Text("Add Category"),
                 ),
 
                 const SizedBox(height: 10),
@@ -512,7 +487,6 @@ Future<void> addBudgetGoal() async {
                 ),
               ],
             ),
-
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
@@ -521,9 +495,13 @@ Future<void> addBudgetGoal() async {
               ElevatedButton(
                 onPressed: () async {
                   final category = selectedCategory;
-                  final limit = double.tryParse(limitController.text.trim()) ?? 0;
+                  final limit =
+                      double.tryParse(limitController.text.trim()) ?? 0;
+                  final name = nameController.text.trim(); // ✅ NEW
 
-                  if (category == null || category.isEmpty || limit <= 0) return;
+                  if (category == null ||
+                      category.isEmpty ||
+                      limit <= 0) return;
 
                   final normalizedCategory = category.toLowerCase();
 
@@ -533,14 +511,16 @@ Future<void> addBudgetGoal() async {
                   final existing = await _firestore
                       .collection('budgets')
                       .where('uid', isEqualTo: user.uid)
-                      .where('category', isEqualTo: normalizedCategory)
+                      .where('category',
+                          isEqualTo: normalizedCategory)
                       .get();
 
                   if (existing.docs.isNotEmpty) {
                     if (!mounted) return;
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
-                        content: Text("Budget already exists for this category"),
+                        content: Text(
+                            "Budget already exists for this category"),
                       ),
                     );
                     return;
@@ -549,6 +529,9 @@ Future<void> addBudgetGoal() async {
                   await _firestore.collection('budgets').add({
                     'uid': user.uid,
                     'category': normalizedCategory,
+                    'name': name.isEmpty
+                        ? normalizedCategory
+                        : name, // ✅ NEW
                     'limit': limit,
                     'spent': 0.0,
                   });

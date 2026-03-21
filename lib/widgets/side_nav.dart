@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../main.dart'; // for ThemeController
 
 class SideNav extends StatefulWidget {
   final int selectedIndex;
@@ -25,8 +26,10 @@ class _SideNavState extends State<SideNav> {
       {'icon': Icons.pie_chart, 'label': 'Budget'},
       {'icon': Icons.savings, 'label': 'Savings'},
       {'icon': Icons.group, 'label': 'SplitTheBill'},
-      {'icon': Icons.receipt,'label':'Bill Manager'},
+      {'icon': Icons.receipt, 'label': 'Bill Manager'},
     ];
+
+    final theme = ThemeController.of(context); // access dark mode controller
 
     return Container(
       width: 220,
@@ -35,6 +38,7 @@ class _SideNavState extends State<SideNav> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Logo
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 16),
             child: Row(
@@ -55,6 +59,7 @@ class _SideNavState extends State<SideNav> {
           ),
           const SizedBox(height: 30),
 
+          // Navigation items
           ...List.generate(navItems.length, (index) {
             final item = navItems[index];
             final isSelected = widget.selectedIndex == index;
@@ -66,10 +71,10 @@ class _SideNavState extends State<SideNav> {
                 onExit: (_) => setState(() => hoveredIndex = -1),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
-                  margin: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 6),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 10),
+                  margin:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   decoration: BoxDecoration(
                     color: isSelected
                         ? Colors.white
@@ -82,17 +87,13 @@ class _SideNavState extends State<SideNav> {
                     children: [
                       Icon(
                         item['icon'] as IconData,
-                        color: isSelected
-                            ? const Color(0xFF083549)
-                            : Colors.white,
+                        color: isSelected ? const Color(0xFF083549) : Colors.white,
                       ),
                       const SizedBox(width: 12),
                       Text(
                         item['label'] as String,
                         style: TextStyle(
-                          color: isSelected
-                              ? const Color(0xFF083549)
-                              : Colors.white,
+                          color: isSelected ? const Color(0xFF083549) : Colors.white,
                         ),
                       ),
                     ],
@@ -101,6 +102,27 @@ class _SideNavState extends State<SideNav> {
               ),
             );
           }),
+
+          const Spacer(), // push dark mode toggle to bottom
+
+          // Dark Mode Toggle
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  "Dark Mode",
+                  style: TextStyle(color: Colors.white),
+                ),
+                Switch(
+                  value: theme.isDarkMode,
+                  onChanged: (value) => theme.toggleTheme(value),
+                  activeColor: Colors.white,
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
