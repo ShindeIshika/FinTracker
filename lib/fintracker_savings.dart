@@ -53,7 +53,7 @@ class _SavingsPageState extends State<SavingsPage> {
       case 0:
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (_) => const DashboardScreen()),
+          MaterialPageRoute(builder: (_) => FintrackerHome()),
         );
         break;
       case 1:

@@ -36,13 +36,17 @@ class FinTrackerApp extends StatelessWidget {
   ),
   routes: {
     '/login': (_) => const LoginPage(),
-    '/dashboard': (_) => const DashboardScreen(),
+    '/dashboard': (_) => FintrackerHome(),
     '/transactions': (_) => const TransactionsPage(),
     '/budget': (_) => const BudgetPlannerScreen(),
     '/savings':(_)=> const SavingsPage(),
     '/split': (_) => const SplitBillPage(),
     '/bills': (_)=> const BillsPage(),
-    '/verify-email': (_) => const EmailVerificationScreen(),
+    '/verify-email': (context) {
+    final email =
+      ModalRoute.of(context)?.settings.arguments as String?;
+    return EmailVerificationScreen(email: email);
+    },
     '/forgot-password': (_) => const ForgotPasswordScreen(),
   },
   home: StreamBuilder<User?>(
@@ -55,7 +59,14 @@ class FinTrackerApp extends StatelessWidget {
       }
 
       if (snapshot.hasData) {
-        return const DashboardScreen();
+        final user = snapshot.data!;
+
+        // 🔴 KEY LOGIC
+        if (!user.emailVerified) {
+          return const EmailVerificationScreen();
+        }
+
+        return const FintrackerHome();
       }
 
       return const LoginPage();

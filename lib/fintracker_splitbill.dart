@@ -1053,7 +1053,7 @@ class _SplitBillPageState extends State<SplitBillPage> {
               case 0:
                 Navigator.pushReplacement(
                   context,
-                  MaterialPageRoute(builder: (_) => const DashboardScreen()),
+                  MaterialPageRoute(builder: (_) => FintrackerHome()),
                 );
                 break;
               case 1:

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-
+import 'package:flutter_fintracker/fintracker_home.dart';
 class TipsPage extends StatefulWidget {
   const TipsPage({super.key});
 
@@ -45,7 +45,6 @@ class _TipsPageState extends State<TipsPage> {
             .collection('users')
             .doc(user.uid)
             .collection('previous_tips')
-            .orderBy('date', descending: true)
             .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
@@ -53,10 +52,10 @@ class _TipsPageState extends State<TipsPage> {
           }
 
           if (snapshot.hasError) {
-            return const Center(
+            return Center(
               child: Text(
-                "Error loading tips.",
-                style: TextStyle(color: Colors.red),
+                "Error: ${snapshot.error}",
+                style: const TextStyle(color: Colors.red),
               ),
             );
           }

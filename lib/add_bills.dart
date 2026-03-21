@@ -17,7 +17,6 @@ class _AddEditBillPageState extends State<AddEditBillPage> {
 
   final nameController = TextEditingController();
   final amountController = TextEditingController();
-  final categoryController = TextEditingController();
 
   String frequency = "Monthly";
   int interval = 1;
@@ -34,7 +33,6 @@ class _AddEditBillPageState extends State<AddEditBillPage> {
 
       nameController.text = data['name'] ?? "";
       amountController.text = (data['amount'] ?? 0).toString();
-      categoryController.text = data['category'] ?? "";
 
       frequency = data['frequency'] ?? "Monthly";
       interval = data['interval'] ?? 1;
@@ -52,6 +50,7 @@ class _AddEditBillPageState extends State<AddEditBillPage> {
       appBar: AppBar(
         title: Text(isEditing ? "Edit Bill" : "Add Bill"),
         backgroundColor: const Color(0xFF203A43),
+        iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: Container(
         padding: const EdgeInsets.all(24),
@@ -94,8 +93,7 @@ class _AddEditBillPageState extends State<AddEditBillPage> {
                     _buildInput("Amount", amountController, isNumber: true),
                     const SizedBox(height: 18),
 
-                    _buildInput("Category", categoryController),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 4),
 
                     /// Due Date Picker
                     const Text(
@@ -252,7 +250,6 @@ class _AddEditBillPageState extends State<AddEditBillPage> {
       'uid': user!.uid,
       'name': nameController.text,
       'amount': double.parse(amountController.text),
-      'category': categoryController.text,
       'frequency': frequency,
       'interval': interval,
       'nextDueDate': Timestamp.fromDate(selectedDueDate),

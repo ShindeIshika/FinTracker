@@ -14,6 +14,8 @@ import 'package:flutter_fintracker/previous_tips.dart';
 import 'package:flutter_fintracker/recurring_payments.dart';
 import 'widgets/side_nav.dart';
 import 'split_bills_request_page.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 final List<Map<String, String>> financeTips = [
   {
@@ -61,8 +63,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  bool _tipShown = false;
-
+  
   int selectedNavIndex = 0;
   int touchedPieIndex = -1;
   String firstName = "User";
@@ -76,7 +77,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   bool hasIncome = false;
   bool hasExpense = false;
-
+  bool _tipShown = false;
   PieChartFilter selectedPieFilter = PieChartFilter.monthly;
 
   String get pieChartTitle {
@@ -84,7 +85,69 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ? "Spending Breakdown (This Month)"
         : "Spending Breakdown (This Year)";
   }
+  Future<Map<String, String>?> fetchTipFromAPI() async {
+    try {
+      final response = await http.get(
+        Uri.parse('https://api.api-ninjas.com/v1/quotes?category=money'),
+        headers: {'X-Api-Key': 'YOUR_API_KEY'},
+      );
 
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+
+        if (data != null && data.length > 0) {
+          return {
+            "term": "Finance Tip",
+            "tip": data[0]['quote'],
+          };
+        }
+      }
+    } catch (e) {
+      print("API Error: $e");
+    }
+
+    return null;
+  }
+  Future<void> _handleLogout() async {
+  final shouldLogout = await showDialog<bool>(
+    context: context,
+    barrierDismissible: false,
+    builder: (context) => AlertDialog(
+      title: const Text("Logout"),
+      content: const Text("Are you sure you want to log out?"),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text("Cancel"),
+        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF083549), // ✅ your color
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+          ),
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text(
+            "Logout",
+            style: TextStyle(color: Colors.white),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  if (shouldLogout ?? false) {
+    await FirebaseAuth.instance.signOut();
+
+    if (!context.mounted) return;
+
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const LoginPage()),
+      (route) => false,
+    );
+  }
+}
   Future<void> showTipOfTheDay() async {
     if (_tipShown) return;
 
@@ -95,9 +158,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     final today = DateTime.now().toIso8601String().split('T').first;
 
-    final dayIndex = DateTime.now().difference(DateTime(2024)).inDays;
-    final tipIndex = dayIndex % financeTips.length;
-    final todayTip = financeTips[tipIndex];
+    final todayTip = await fetchTipFromAPI();
+
+    if (todayTip == null) return;
 
     final String docId = "${today}_${todayTip['term']!.replaceAll(' ', '_')}";
 
@@ -117,28 +180,98 @@ class _DashboardScreenState extends State<DashboardScreen> {
         'shownAt': FieldValue.serverTimestamp(),
       });
     }
-
+    
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
 
-      showDialog(
+      showModalBottomSheet(
         context: context,
-        barrierDismissible: true,
-        builder: (_) => AlertDialog(
-          title: Text(
-            "💡 ${todayTip['term']}",
-            style: const TextStyle(fontWeight: FontWeight.bold),
-          ),
-          content: Text(todayTip['tip']!),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: const Text("Got it"),
-            ),
-          ],
+        isScrollControlled: true,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
+        builder: (_) {
+          return Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // 🔹 Drag handle
+                Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade400,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+
+                // 💡 Icon
+                const Icon(
+                  Icons.lightbulb_outline,
+                  color: Color(0xFF083549),
+                  size: 40,
+                ),
+
+                const SizedBox(height: 12),
+
+                // 🔹 Title
+                Text(
+                  todayTip['term']!,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF083549),
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+
+                const SizedBox(height: 10),
+
+                // 🔹 Tip content
+                Text(
+                  todayTip['tip']!,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: Colors.black87,
+                    height: 1.4,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+
+                const SizedBox(height: 20),
+
+                // ✅ Button (MATCHES YOUR LOGIN UI)
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF083549),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    onPressed: () {
+                      Navigator.pop(context);
+                    },
+                    child: const Text(
+                      "Got it",
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 10),
+              ],
+            ),
+          );
+        },
       );
     });
   }
@@ -146,7 +279,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void initState() {
     super.initState();
-    showTipOfTheDay();
+
+    Future.delayed(const Duration(milliseconds: 500), () {
+      showTipOfTheDay();
+    });
+
     fetchDashboardData();
     fetchUserName();
     _generateRecurringTransactions();
@@ -486,14 +623,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           IconButton(
             icon: const Icon(Icons.logout, color: Colors.white),
             tooltip: "Logout",
-            onPressed: () async {
-              await FirebaseAuth.instance.signOut();
-              if (!mounted) return;
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (_) => const LoginPage()),
-              );
-            },
+            onPressed: _handleLogout, // ✅ clean & stable
           ),
         ],
       ),
@@ -561,74 +691,40 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
               const SizedBox(height: 20),
 
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Colors.black12,
-                      blurRadius: 6,
-                      offset: Offset(0, 3),
-                    )
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      "Quick Actions",
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF083549),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        _quickActionButton(
-                          icon: Icons.remove_circle_outline,
-                          label: "Add Expense",
-                          color: const Color.fromARGB(255, 194, 21, 9),
-                          onPressed: () async {
-                            final result = await Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) =>
-                                    AddTransactionPage(type: 'expense'),
-                              ),
-                            );
-                            if (result == true) {
-                              fetchDashboardData();
-                            }
-                          },
-                        ),
-                        const SizedBox(width: 8),
-                        _quickActionButton(
-                          icon: Icons.add_circle_outline,
-                          label: "Add Income",
-                          color: const Color.fromARGB(255, 2, 135, 7),
-                          onPressed: () async {
-                            final result = await Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) =>
-                                    AddTransactionPage(type: 'income'),
-                              ),
-                            );
-                            if (result == true) {
-                              fetchDashboardData();
-                            }
-                          },
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-
+if (hasIncome)
+  Row(
+    children: [
+      _quickActionButton(
+        icon: Icons.add_circle_outline,
+        label: "Add Income",
+        color: const Color.fromARGB(255, 2, 135, 7),
+        onPressed: () async {
+          final result = await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => AddTransactionPage(type: 'income'),
+            ),
+          );
+          if (result == true) fetchDashboardData();
+        },
+      ),
+      const SizedBox(width: 10),
+      _quickActionButton(
+        icon: Icons.remove_circle_outline,
+        label: "Add Expense",
+        color: const Color.fromARGB(255, 194, 21, 9),
+        onPressed: () async {
+          final result = await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => AddTransactionPage(type: 'expense'),
+            ),
+          );
+          if (result == true) fetchDashboardData();
+        },
+      ),
+    ],
+  ),
               const SizedBox(height: 20),
 
               if (!hasIncome) _introCard(),
@@ -986,19 +1082,52 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Icon(Icons.auto_graph, size: 60, color: Colors.blue.shade300),
           const SizedBox(height: 16),
           const Text(
-            "Welcome to FinTracker!",
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: Colors.blue,
-            ),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            "Add your first income to start tracking your finances.\nThen add expenses to see your spending breakdown.",
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 14, color: Colors.blueGrey),
-          ),
+  "Start tracking your money",
+  style: TextStyle(
+    fontSize: 18,
+    fontWeight: FontWeight.bold,
+    color: Color(0xFF083549),
+  ),
+),
+
+const SizedBox(height: 10),
+
+const Text(
+  "You’re 2 steps away:",
+  style: TextStyle(fontSize: 14, color: Colors.blueGrey),
+),
+
+const SizedBox(height: 8),
+
+const Text(
+  "1. Add your income 💰\n2. Add expenses 🧾",
+  textAlign: TextAlign.center,
+  style: TextStyle(fontSize: 14),
+),
+
+const SizedBox(height: 16),
+
+ElevatedButton(
+  onPressed: () async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AddTransactionPage(type: 'income'),
+      ),
+    );
+    if (result == true) {
+      fetchDashboardData();
+    }
+  },
+  style: ElevatedButton.styleFrom(
+    backgroundColor: const Color(0xFF083549),
+    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+  ),
+  child: const Text(
+    "Add Income",
+    style: TextStyle(color: Colors.white),
+  ),
+),
           const SizedBox(height: 16),
           Text(
             "💡 Tip: ${financeTips[Random().nextInt(financeTips.length)]['tip']}",
@@ -1130,5 +1259,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ],
       ),
     );
+  }
+}
+
+class FintrackerHome extends StatelessWidget {
+  const FintrackerHome({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const DashboardScreen();
   }
 }

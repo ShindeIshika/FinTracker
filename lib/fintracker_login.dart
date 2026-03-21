@@ -43,7 +43,7 @@ class _LoginPageState extends State<LoginPage> {
 
       final querySnapshot = await _db
           .collection('users')
-          .where('username', isEqualTo: username)
+          .where('username', isEqualTo: username.trim().toLowerCase())
           .limit(1)
           .get();
 
@@ -81,61 +81,36 @@ class _LoginPageState extends State<LoginPage> {
     _showSnackbar('Verifying credentials...');
 
     try {
+      String? emailToUse;
+
       if (_isUsingUsername) {
-        // 🔍 Username mode → Lookup Firestore for email
         final fetchedEmail = await _fetchEmailFromDatabase(input);
+
         if (fetchedEmail == null) {
           _showSnackbar('Username not found. Please check your entry.');
           return;
         }
+
         emailToUse = fetchedEmail;
       } else {
-        // 📧 Email mode → Use input directly
         emailToUse = input;
       }
 
-      print("🚀 Attempting FirebaseAuth login with: $emailToUse");
-
-    String loginInput = loginIdController.text.trim();
-    String email;
+      final userCredential = await FirebaseAuth.instance
+          .signInWithEmailAndPassword(
+        email: emailToUse,
+        password: password,
+      );
     
-    // 🔍 Step 1: Detect email or username
-    if (loginInput.contains('@')) {
-      email = loginInput.toLowerCase();
-    } else {
-      // 🔥 Step 2: Fetch email from Firestore using username
-      final query = await FirebaseFirestore.instance
-          .collection('users')
-          .where('username', isEqualTo: loginInput)
-          .get();
-    
-      if (query.docs.isEmpty) {
-        _showSnackbar("Username not found");
-        return;
-      }
-    
-      email = query.docs.first['email'];
-    }
-    
-    // 🔐 Step 3: Login with email
-    final userCredential = await FirebaseAuth.instance
-        .signInWithEmailAndPassword(
-      email: email,
-      password: passwordController.text.trim(),
-    );
-    
-    // ✅ NOW this will work
     if (!userCredential.user!.emailVerified) {
-      _showSnackbar("Please verify your email before login (Check spam folder as well) ");
-    
-      await FirebaseAuth.instance.signOut();
+      Navigator.pushReplacementNamed(context, '/verify-email');
       return;
     }
     
     // ✅ then navigate
     Navigator.pushReplacement(
       context,
-      MaterialPageRoute(builder: (context) => DashboardScreen()),
+      MaterialPageRoute(builder: (context) => FintrackerHome()),
     );  
       
 
