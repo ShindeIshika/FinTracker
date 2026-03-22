@@ -12,107 +12,60 @@ class SplitBillRequestsPage extends StatefulWidget {
 class _SplitBillRequestsPageState extends State<SplitBillRequestsPage> {
   String? processingId;
 
- Future<void> _acceptRequest(DocumentSnapshot requestDoc) async {
+Future<void> _acceptRequest(DocumentSnapshot requestDoc) async {
   try {
+    setState(() => processingId = requestDoc.id);
+
     final data = requestDoc.data() as Map<String, dynamic>;
     final String billId = (data["billId"] ?? "").toString();
     final String toUid = (data["toUid"] ?? "").toString();
 
-    final billRef =
-        FirebaseFirestore.instance.collection("split_bills").doc(billId);
-
-    final batch = FirebaseFirestore.instance.batch();
-
-    batch.update(billRef, {
+    // Only add user to participantUids — NO transaction here.
+    // The transaction is created when they mark as paid from the detail sheet.
+    await FirebaseFirestore.instance
+        .collection("split_bills")
+        .doc(billId)
+        .update({
       "participantUids": FieldValue.arrayUnion([toUid]),
       "updatedAt": Timestamp.now(),
     });
 
-    batch.update(requestDoc.reference, {
+    await requestDoc.reference.update({
       "status": "accepted",
       "updatedAt": Timestamp.now(),
     });
 
-    await batch.commit();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text("Request accepted")));
   } catch (e) {
-    rethrow;
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text("Accept failed: $e")));
+  } finally {
+    if (mounted) setState(() => processingId = null);
   }
 }
 
-  Future<void> _rejectRequest(DocumentSnapshot requestDoc) async {
-    try {
-      setState(() {
-        processingId = requestDoc.id;
-      });
-
-      final data = requestDoc.data() as Map<String, dynamic>;
-      final String billId = (data["billId"] ?? "").toString();
-      final String toUid = (data["toUid"] ?? "").toString();
-
-      if (billId.isEmpty || toUid.isEmpty) {
-        throw Exception("Invalid request data");
-      }
-
-      final billRef =
-          FirebaseFirestore.instance.collection("split_bills").doc(billId);
-
-      final billSnap = await billRef.get();
-
-      final batch = FirebaseFirestore.instance.batch();
-
-      if (billSnap.exists) {
-        final billData = billSnap.data() as Map<String, dynamic>;
-
-        final participants = List<Map<String, dynamic>>.from(
-          ((billData["participants"] ?? []) as List)
-              .map((e) => Map<String, dynamic>.from(e)),
-        );
-
-        participants.removeWhere(
-          (p) => (p["uid"] ?? "").toString() == toUid,
-        );
-
-        final participantUids =
-            List<String>.from(billData["participantUids"] ?? []);
-        participantUids.removeWhere((uid) => uid == toUid);
-
-        final userSettlements =
-            Map<String, dynamic>.from(billData["userSettlements"] ?? {});
-        userSettlements.remove(toUid);
-
-        batch.update(billRef, {
-          "participants": participants,
-          "participantUids": participantUids,
-          "userSettlements": userSettlements,
-          "updatedAt": Timestamp.now(),
-        });
-      }
-
-      batch.update(requestDoc.reference, {
-        "status": "rejected",
-        "updatedAt": Timestamp.now(),
-      });
-
-      await batch.commit();
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Request rejected")),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Reject failed: $e")),
-      );
-    } finally {
-      if (mounted) {
-        setState(() {
-          processingId = null;
-        });
-      }
-    }
+Future<void> _rejectRequest(DocumentSnapshot requestDoc) async {
+  try {
+    setState(() => processingId = requestDoc.id);
+    // Only update the request — don't touch the bill document
+    await requestDoc.reference.update({
+      "status": "rejected",
+      "updatedAt": Timestamp.now(),
+    });
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text("Request rejected")));
+  } catch (e) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text("Reject failed: $e")));
+  } finally {
+    if (mounted) setState(() => processingId = null);
   }
-
+}
   @override
   Widget build(BuildContext context) {
     final uid = FirebaseAuth.instance.currentUser?.uid;

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:math';
+import 'notification_service.dart';
 
 class AddTransactionPage extends StatefulWidget {
   final String type; // 'income' or 'expense'
@@ -14,15 +15,17 @@ class AddTransactionPage extends StatefulWidget {
 
 // Category colors for PieChart (can be moved to global file)
 final Map<String, Color> categoryColors = {
-  'Food': const Color.fromARGB(255, 91, 54, 0),
-  'Travel': const Color.fromARGB(255, 2, 54, 97),
-  'Shopping': const Color.fromARGB(255, 68, 2, 79),
-  'Bills': const Color.fromARGB(255, 156, 12, 2),
-  'Salary': const Color.fromARGB(255, 0, 100, 90),
-  'Bonus': Colors.green,
-  'Interest': Colors.blue,
-  'Other': Colors.grey,
-  'General': Colors.purple,
+  'Food & Drinks': Colors.brown,
+  'Transport': Colors.blue.shade700,
+  'Shopping': Colors.purple,
+  'Entertainment': Colors.red.shade700,
+  'Bills & Utilities': Colors.teal.shade700,
+  'Health & Fitness': Colors.green.shade700,
+  'Others': Colors.grey,
+  'Salary': Colors.green,
+  'Bonus': Colors.orange,
+  'Investments / Interest': Colors.blue,
+  'Freelance / Side Hustle': Colors.pink,
 };
 
 class _AddTransactionPageState extends State<AddTransactionPage> {
@@ -30,21 +33,28 @@ class _AddTransactionPageState extends State<AddTransactionPage> {
   final _amountController = TextEditingController();
   final _newCategoryController = TextEditingController();
   
-
-  bool _isRecurring = false;
-final String _repeatType = 'weekly'; // daily / weekly / custom
-final List<int> _selectedDays = [];
-
-
   String _selectedCategory = '';
   String _selectedAccount = 'Cash';
   DateTime _selectedDate = DateTime.now();
 
-  // Separate categories for income and expense
-  List<String> incomeCategories = ['Salary', 'Bonus', 'Interest', 'Other'];
-  List<String> expenseCategories = ['Food', 'Travel', 'Shopping', 'Bills', 'General'];
+ List<String> expenseCategories = [
+  'Food & Drinks',
+  'Transport',
+  'Shopping',
+  'Entertainment',
+  'Bills & Utilities',
+  'Health & Fitness',
+  'Others'
+];
 
-  final List<String> accounts = ['Cash', 'Bank', 'UPI'];
+List<String> incomeCategories = [
+  'Salary',
+  'Investments / Interest',
+  'Freelance / Side Hustle',
+  'Others'
+];
+
+  final List<String> accounts = ['Cash', 'Cheque', 'UPI'];
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -72,13 +82,6 @@ final List<int> _selectedDays = [];
     }
 
     if (!_formKey.currentState!.validate()) return;
-    if (_isRecurring && _selectedDays.isEmpty) {
-  ScaffoldMessenger.of(context).showSnackBar(
-    const SnackBar(content: Text("Please select at least one day")),
-  );
-  return;
-}
-
 
     final double amount = double.parse(_amountController.text);
     try {
@@ -93,40 +96,39 @@ final List<int> _selectedDays = [];
     'createdAt': FieldValue.serverTimestamp(),
   });
 
-  // 2️⃣ If recurring is ON → also save recurring rule
-  if (_isRecurring) {
-    await _firestore.collection('recurring_payments').add({
-      'uid': user.uid,
-      'transactionId': transactionRef.id,
-      'type': widget.type,
-      'amount': amount,
-      'category': _selectedCategory,
-      'account': _selectedAccount,
-      'startDate': Timestamp.fromDate(_selectedDate),
-      'repeatType': _repeatType,
-      'days': _selectedDays,
-      'isActive': true,
-      'lastGenerated': null,
-      'createdAt': FieldValue.serverTimestamp(),
-    });
-  }
-
   // 3️⃣ Budget logic (UNCHANGED)
-  if (widget.type == 'expense') {
-    final budgetQuery = await _firestore
-        .collection('budgets')
-        .where('uid', isEqualTo: user.uid)
-        .where('category', isEqualTo: _selectedCategory)
-        .limit(1)
-        .get();
+ if (widget.type == 'expense') {
+  final budgetQuery = await _firestore
+      .collection('budgets')
+      .where('uid', isEqualTo: user.uid)
+      .where('category', isEqualTo: _selectedCategory.toLowerCase())
+      .limit(1)
+      .get();
 
-    if (budgetQuery.docs.isNotEmpty) {
-      final budgetDoc = budgetQuery.docs.first;
-      await _firestore.collection('budgets').doc(budgetDoc.id).update({
-        'spent': FieldValue.increment(amount),
-      });
+  if (budgetQuery.docs.isNotEmpty) {
+    final budgetDoc = budgetQuery.docs.first;
+    final data = budgetDoc.data() as Map<String, dynamic>;
+
+    await _firestore.collection('budgets').doc(budgetDoc.id).update({
+      'spent': FieldValue.increment(amount),
+    });
+
+    // ── Check thresholds after update ──────────────────────────
+    final newSpent = (data['spent'] as num).toDouble() + amount;
+    final limit = (data['limit'] as num).toDouble();
+    final percent = limit > 0 ? (newSpent / limit) * 100 : 0.0;
+
+    if (percent >= 100) {
+      await NotificationService.showBudgetAlert(
+        _selectedCategory, percent,
+      );
+    } else if (percent >= 75) {
+      await NotificationService.showBudgetAlert(
+        _selectedCategory, percent,
+      );
     }
   }
+}
 
   ScaffoldMessenger.of(context).showSnackBar(
     const SnackBar(content: Text("Transaction added successfully")),
@@ -301,62 +303,6 @@ final List<int> _selectedDays = [];
               ),
 
              const SizedBox(height: 20),
-
-SwitchListTile(
-  title: const Text(
-    "Make Payment Recurring?",
-    style: TextStyle(fontWeight: FontWeight.bold),
-  ),
-  value: _isRecurring,
-  activeThumbColor: accentRed,
-  activeTrackColor: accentRed.withValues(alpha: 0.5),
-
-  onChanged: (value) {
-    setState(() {
-      _isRecurring = value;
-    });
-  },
-),
-
-if (_isRecurring) ...[
-  const SizedBox(height: 10),
-  const Text(
-    "Repeat On",
-    style: TextStyle(fontWeight: FontWeight.bold),
-  ),
-  const SizedBox(height: 10),
-
-  Wrap(
-    spacing: 8,
-    children: List.generate(7, (index) {
-      final dayNumber = index + 1;
-      final dayName = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][index];
-      final isSelected = _selectedDays.contains(dayNumber);
-
-      return ChoiceChip(
-        label: Text(dayName),
-        selected: isSelected,
-        selectedColor: accentRed,
-        onSelected: (selected) {
-          setState(() {
-            if (selected) {
-              _selectedDays.add(dayNumber);
-            } else {
-              _selectedDays.remove(dayNumber);
-            }
-          });
-        },
-      );
-    }),
-  ),
-],
-
-const SizedBox(height: 20),
-
-
-
-
-              const SizedBox(height: 20),
 
               /// DATE
               const Text(

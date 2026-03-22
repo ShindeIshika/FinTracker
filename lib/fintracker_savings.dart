@@ -53,7 +53,7 @@ class _SavingsPageState extends State<SavingsPage> {
       case 0:
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (_) => const DashboardScreen()),
+          MaterialPageRoute(builder: (_) => FintrackerHome()),
         );
         break;
       case 1:
@@ -397,12 +397,12 @@ class _SavingsPageState extends State<SavingsPage> {
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: addSavingsGoal,
-        backgroundColor: const Color(0xFF0D6EAA),
-        foregroundColor: Colors.white,
-        icon: const Icon(Icons.add),
-        label: const Text("Add Goal"),
-      ),
+      onPressed: addSavingsGoal, // ⚠️ also fix function name
+      backgroundColor: const Color(0xFF083549),
+      foregroundColor: Colors.white,
+      icon: const Icon(Icons.add),
+      label: const Text("Add Goal"),
+    ),
       body: Container(
         width: double.infinity,
         padding: const EdgeInsets.all(16),

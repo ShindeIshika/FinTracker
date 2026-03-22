@@ -6,9 +6,9 @@ import 'package:flutter_fintracker/fintracker_bills.dart';
 import 'package:flutter_fintracker/fintracker_login.dart';
 import 'package:flutter_fintracker/recurring_payments.dart';
 import 'package:flutter_fintracker/previous_tips.dart';
-import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'category_service.dart';
 
 String formatCategory(String text) {
   if (text.isEmpty) return text;
@@ -20,27 +20,24 @@ String normalizeCategory(String text) {
 }
 
 final Map<String, IconData> categoryIcons = {
-  'food': Icons.fastfood,
+  'food & drinks': Icons.fastfood,
   'transport': Icons.directions_car,
   'shopping': Icons.shopping_bag,
   'entertainment': Icons.movie,
-  'health': Icons.local_hospital,
-  'education': Icons.school,
-  'bills': Icons.receipt_long,
-  'gift': Icons.card_giftcard,
+  'bills & utilities': Icons.receipt_long,
+  'health & fitness': Icons.local_hospital,
+  'others': Icons.category,
 };
 
 final Map<String, Color> categoryColors = {
-  'food': Colors.orange,
+  'food & drinks': Colors.orange,
   'transport': Colors.blue,
   'shopping': Colors.purple,
   'entertainment': Colors.redAccent,
-  'health': Colors.green,
-  'education': Colors.indigo,
-  'bills': Colors.brown,
-  'gift': Colors.pink,
+  'bills & utilities': Colors.brown,
+  'health & fitness': Colors.green,
+  'others': Colors.grey,
 };
-
 class BudgetPlannerScreen extends StatefulWidget {
   const BudgetPlannerScreen({super.key});
 
@@ -255,7 +252,7 @@ class _BudgetPlannerScreenState extends State<BudgetPlannerScreen> {
                                               CrossAxisAlignment.start,
                                           children: [
                                             Text(
-                                              formatCategory(data['category']),
+                                              formatCategory(data['name'] ?? data['category']),
                                               maxLines: 1,
                                               overflow: TextOverflow.ellipsis,
                                               style: const TextStyle(
@@ -417,77 +414,139 @@ class _BudgetPlannerScreenState extends State<BudgetPlannerScreen> {
     );
   }
 
-  Future<void> addBudgetGoal() async {
-    final categoryController = TextEditingController();
-    final limitController = TextEditingController();
+Future<void> addBudgetGoal() async {
+  final limitController = TextEditingController();
+  final nameController = TextEditingController(); // ✅ NEW
+  final categories = CategoryService.getAll();
 
-    await showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("Add Budget Goal"),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: categoryController,
-              decoration: const InputDecoration(labelText: "Category"),
-            ),
-            TextField(
-              controller: limitController,
-              decoration: const InputDecoration(labelText: "Limit (₹)"),
-              keyboardType: TextInputType.number,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Cancel"),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final category = categoryController.text.trim();
-              final normalizedCategory = category.toLowerCase();
-              final limit = double.tryParse(limitController.text.trim()) ?? 0;
+  String? selectedCategory =
+      categories.isNotEmpty ? categories.first : null;
 
-              if (category.isEmpty || limit <= 0) return;
-
-              final user = _auth.currentUser;
-              if (user == null) return;
-
-              final existing = await _firestore
-                  .collection('budgets')
-                  .where('uid', isEqualTo: user.uid)
-                  .where('category', isEqualTo: normalizedCategory)
-                  .get();
-
-              if (existing.docs.isNotEmpty) {
-                if (!mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text("Budget already exists for this category"),
+  await showDialog(
+    context: context,
+    builder: (context) {
+      return StatefulBuilder(
+        builder: (context, setStateDialog) {
+          return AlertDialog(
+            title: const Text("Add Budget Goal"),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // ✅ NAME FIELD
+                TextField(
+                  controller: nameController,
+                  decoration: const InputDecoration(
+                    labelText: "Name (optional)",
+                    hintText: "e.g. Monthly Food Budget",
                   ),
-                );
-                return;
-              }
+                ),
+                const SizedBox(height: 10),
 
-              await _firestore.collection('budgets').add({
-                'uid': user.uid,
-                'category': normalizedCategory,
-                'limit': limit,
-                'spent': 0.0,
-              });
+                // ✅ CATEGORY DROPDOWN
+                ValueListenableBuilder<List<String>>(
+                  valueListenable: CategoryService.notifier,
+                  builder: (context, categories, _) {
+                    if (categories.isEmpty) {
+                      return const Text("No categories available");
+                    }
 
-              if (!mounted) return;
-              Navigator.pop(context);
-            },
-            child: const Text("Add"),
-          ),
-        ],
-      ),
-    );
-  }
+                    if (selectedCategory == null ||
+                        !categories.contains(selectedCategory)) {
+                      selectedCategory = categories.first;
+                    }
 
+                    return DropdownButtonFormField<String>(
+                      value: selectedCategory,
+                      items: categories
+                          .map(
+                            (cat) => DropdownMenuItem(
+                              value: cat,
+                              child: Text(cat),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (value) {
+                        setStateDialog(() {
+                          selectedCategory = value;
+                        });
+                      },
+                      decoration:
+                          const InputDecoration(labelText: "Category"),
+                    );
+                  },
+                ),
+
+                const SizedBox(height: 10),
+
+                // ✅ LIMIT INPUT
+                TextField(
+                  controller: limitController,
+                  decoration:
+                      const InputDecoration(labelText: "Limit (₹)"),
+                  keyboardType: TextInputType.number,
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text("Cancel"),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  final category = selectedCategory;
+                  final limit =
+                      double.tryParse(limitController.text.trim()) ?? 0;
+                  final name = nameController.text.trim(); // ✅ NEW
+
+                  if (category == null ||
+                      category.isEmpty ||
+                      limit <= 0) return;
+
+                  final normalizedCategory = category.toLowerCase();
+
+                  final user = _auth.currentUser;
+                  if (user == null) return;
+
+                  final existing = await _firestore
+                      .collection('budgets')
+                      .where('uid', isEqualTo: user.uid)
+                      .where('category',
+                          isEqualTo: normalizedCategory)
+                      .get();
+
+                  if (existing.docs.isNotEmpty) {
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                            "Budget already exists for this category"),
+                      ),
+                    );
+                    return;
+                  }
+
+                  await _firestore.collection('budgets').add({
+                    'uid': user.uid,
+                    'category': normalizedCategory,
+                    'name': name.isEmpty
+                        ? normalizedCategory
+                        : name, // ✅ NEW
+                    'limit': limit,
+                    'spent': 0.0,
+                  });
+
+                  Navigator.pop(context);
+                },
+                child: const Text("Add"),
+              ),
+            ],
+          );
+        },
+      );
+    },
+  );
+}
   void handleNavTap(int index) {
     if (index == selectedNavIndex) return;
 

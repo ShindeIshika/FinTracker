@@ -86,10 +86,10 @@ class _FintrackerSignUpState extends State<FintrackerSignUp> {
 
       _showSnack('Account created successfully!');
 
-      // Step 4: Redirect to login page
-      Navigator.pushReplacement(
+      Navigator.pushReplacementNamed(
         context,
-        MaterialPageRoute(builder: (context) => const LoginPage()),
+        '/verify-email',
+        arguments: emailController.text.trim(),
       );
     } on FirebaseAuthException catch (e) {
       _showSnack(e.message ?? 'Registration failed.');
