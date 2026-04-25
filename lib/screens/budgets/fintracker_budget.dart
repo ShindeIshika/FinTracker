@@ -1,15 +1,55 @@
 import 'package:flutter/material.dart';
 // import 'package:firebase_auth/firebase_auth.dart';
 // import 'package:cloud_firestore/cloud_firestore.dart';
-import 'widgets/side_nav.dart';
-import 'package:flutter_fintracker/fintracker_bills.dart';
-import 'package:flutter_fintracker/fintracker_login.dart';
+import '../../widgets/side_nav.dart';
+import 'package:flutter_fintracker/screens/bills/fintracker_bills.dart';
+import 'package:flutter_fintracker/screens/auth/fintracker_login.dart';
 import 'package:flutter_fintracker/recurring_payments.dart';
 import 'package:flutter_fintracker/previous_tips.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'category_service.dart';
+import '../../services/category_service.dart';
+// Add to fintracker_budget.dart
 
+import '../../services/notification_service.dart';
+
+class BudgetNotificationHelper {
+  static Future<void> checkBudgetAlerts(
+    List<QueryDocumentSnapshot> docs,
+  ) async {
+    for (final doc in docs) {
+      final data = doc.data() as Map<String, dynamic>;
+      final name = data['name'] ?? data['category'] ?? 'Budget';
+      final spent = (data['spent'] as num).toDouble();
+      final limit = (data['limit'] as num).toDouble();
+
+      if (limit <= 0) continue;
+      final progress = spent / limit;
+
+      // 75% warning
+      if (progress >= 0.75 && progress < 1.0) {
+        await NotificationService.showImmediate(
+          id: name.hashCode + 300,
+          title: '⚠️ Budget Alert: $name',
+          body:
+              'You\'ve used ${(progress * 100).toStringAsFixed(0)}% of your ₹${limit.toStringAsFixed(0)} budget.',
+          payload: 'budget_75_${doc.id}',
+        );
+      }
+
+      // 100% exceeded
+      else if (progress >= 1.0) {
+        await NotificationService.showImmediate(
+          id: name.hashCode + 400,
+          title: '🔴 Budget Exceeded: $name',
+          body:
+              'You\'ve exceeded your ₹${limit.toStringAsFixed(0)} budget by ₹${(spent - limit).toStringAsFixed(0)}!',
+          payload: 'budget_exceeded_${doc.id}',
+        );
+      }
+    }
+  }
+}
 String formatCategory(String text) {
   if (text.isEmpty) return text;
   return text[0].toUpperCase() + text.substring(1);
@@ -169,6 +209,10 @@ class _BudgetPlannerScreenState extends State<BudgetPlannerScreen> {
                   }
 
                   final docs = snapshot.data!.docs;
+                  // Inside StreamBuilder, after getting docs:
+WidgetsBinding.instance.addPostFrameCallback((_) {
+  BudgetNotificationHelper.checkBudgetAlerts(docs);
+});
 
                   if (docs.isEmpty) {
                     return const Center(

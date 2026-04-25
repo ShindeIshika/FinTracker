@@ -4,19 +4,18 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_fintracker/add_transaction.dart';
-import 'package:flutter_fintracker/fintracker_bills.dart';
-import 'package:flutter_fintracker/fintracker_budget.dart';
-import 'package:flutter_fintracker/fintracker_login.dart';
-import 'package:flutter_fintracker/fintracker_savings.dart';
-import 'package:flutter_fintracker/fintracker_splitbill.dart';
-import 'package:flutter_fintracker/fintracker_transaction.dart';
+import 'package:flutter_fintracker/screens/transactions/add_transaction.dart';
+import 'package:flutter_fintracker/screens/bills/fintracker_bills.dart';
+import 'package:flutter_fintracker/screens/budgets/fintracker_budget.dart';
+import 'package:flutter_fintracker/screens/auth/fintracker_login.dart';
+import 'package:flutter_fintracker/screens/savings/fintracker_savings.dart';
+import 'package:flutter_fintracker/screens/splitbill/fintracker_splitbill.dart';
+import 'package:flutter_fintracker/screens/transactions/fintracker_transaction.dart';
 import 'package:flutter_fintracker/previous_tips.dart';
 import 'package:flutter_fintracker/recurring_payments.dart';
-import 'widgets/side_nav.dart';
-import 'split_bills_request_page.dart';
+import '../../widgets/side_nav.dart';
+import '../splitbill/split_bills_request_page.dart';
 import 'package:http/http.dart' as http;
-
 
 final List<Map<String, String>> financeTips = [
   {
@@ -136,7 +135,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF083549),
+              backgroundColor: Theme.of(context).colorScheme.primary,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(20),
               ),
@@ -422,6 +421,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     fetchUserName();
     _generateRecurringTransactions();
   }
+
+ 
 
   Future<void> _generateRecurringTransactions() async {
     final user = FirebaseAuth.instance.currentUser;

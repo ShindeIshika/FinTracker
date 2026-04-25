@@ -2,15 +2,42 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'add_split_bill.dart';
-import 'fintracker_login.dart';
-import 'fintracker_transaction.dart';
-import 'widgets/side_nav.dart';
-import 'previous_tips.dart';
-import 'recurring_payments.dart';
-import 'fintracker_home.dart';
-import 'fintracker_budget.dart';
-import 'fintracker_bills.dart';
+import '../auth/fintracker_login.dart';
+import '../transactions/fintracker_transaction.dart';
+import '../../widgets/side_nav.dart';
+import '../../previous_tips.dart';
+import '../../recurring_payments.dart';
+import '../dashboard/fintracker_home.dart';
+import '../budgets/fintracker_budget.dart';
+import '../bills/fintracker_bills.dart';
 import 'split_bills_request_page.dart';
+// Add to fintracker_splitbill.dart
+
+import '../../services/notification_service.dart';
+
+class SplitBillNotificationHelper {
+  /// Call when pending requests are loaded
+  static Future<void> notifyPendingRequests(int pendingCount) async {
+    if (pendingCount > 0) {
+      await NotificationService.showImmediate(
+        id: 800,
+        title: '💸 Split Bill Request',
+        body: 'You have $pendingCount pending split bill request(s). Tap to review.',
+        payload: 'split_bill_pending',
+      );
+    }
+  }
+
+  /// Call when a payment is settled
+  static Future<void> notifySettled(String personName, double amount) async {
+    await NotificationService.showImmediate(
+      id: 801,
+      title: '✅ Payment Settled',
+      body: '$personName has settled ₹${amount.toStringAsFixed(0)}.',
+      payload: 'split_bill_settled',
+    );
+  }
+}
 
 const String kExpenseType = "expense";
 const String kIncomeType = "income";

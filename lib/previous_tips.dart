@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter_fintracker/fintracker_home.dart';
+import 'package:flutter_fintracker/screens/dashboard/fintracker_home.dart';
 
 class TipsPage extends StatefulWidget {
   const TipsPage({super.key});

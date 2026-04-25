@@ -2,15 +2,70 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
-import 'package:flutter_fintracker/fintracker_home.dart';
-import 'package:flutter_fintracker/fintracker_transaction.dart';
-import 'package:flutter_fintracker/fintracker_budget.dart';
-import 'package:flutter_fintracker/fintracker_bills.dart';
-import 'package:flutter_fintracker/fintracker_splitbill.dart';
-import 'package:flutter_fintracker/fintracker_login.dart';
+import 'package:flutter_fintracker/screens/dashboard/fintracker_home.dart';
+import 'package:flutter_fintracker/screens/transactions/fintracker_transaction.dart';
+import 'package:flutter_fintracker/screens/budgets/fintracker_budget.dart';
+import 'package:flutter_fintracker/screens/bills/fintracker_bills.dart';
+import 'package:flutter_fintracker/screens/splitbill/fintracker_splitbill.dart';
+import 'package:flutter_fintracker/screens/auth/fintracker_login.dart';
 import 'package:flutter_fintracker/previous_tips.dart';
 import 'package:flutter_fintracker/recurring_payments.dart';
-import 'widgets/side_nav.dart';
+import '../../widgets/side_nav.dart';
+// Add to fintracker_savings.dart
+
+import '../../services/notification_service.dart';
+
+class SavingsNotificationHelper {
+  static Future<void> checkSavingsAlerts(
+    List<Map<String, dynamic>> goals,
+  ) async {
+    for (final goal in goals) {
+      final title = goal['title'] ?? 'Goal';
+      final target = (goal['targetAmount'] as num).toDouble();
+      final saved = (goal['savedAmount'] as num).toDouble();
+
+      if (target <= 0) continue;
+      final progress = saved / target;
+
+      // Goal achieved
+      if (progress >= 1.0) {
+        await NotificationService.showImmediate(
+          id: title.hashCode + 500,
+          title: '🎉 Goal Achieved: $title',
+          body: 'Congratulations! You\'ve reached your ₹${target.toStringAsFixed(0)} savings goal!',
+          payload: 'savings_complete_${goal['id']}',
+        );
+      }
+
+      // 75% milestone
+      else if (progress >= 0.75 && progress < 1.0) {
+        await NotificationService.showImmediate(
+          id: title.hashCode + 600,
+          title: '💪 Almost There: $title',
+          body:
+              'You\'re ${(progress * 100).toStringAsFixed(0)}% toward your ₹${target.toStringAsFixed(0)} goal. Keep going!',
+          payload: 'savings_75_${goal['id']}',
+        );
+      }
+
+      // Inactive goal reminder (no updatedAt in last 30 days)
+      if (goal['updatedAt'] != null) {
+        final lastUpdate = (goal['updatedAt'] as Timestamp).toDate();
+        final daysSinceUpdate = DateTime.now().difference(lastUpdate).inDays;
+
+        if (daysSinceUpdate >= 30 && progress < 1.0) {
+          await NotificationService.showImmediate(
+            id: title.hashCode + 700,
+            title: '💰 Don\'t forget: $title',
+            body:
+                'You haven\'t contributed to this goal in $daysSinceUpdate days. ₹${(target - saved).toStringAsFixed(0)} remaining!',
+            payload: 'savings_inactive_${goal['id']}',
+          );
+        }
+      }
+    }
+  }
+}
 
 class SavingsPage extends StatefulWidget {
   const SavingsPage({super.key});
@@ -437,6 +492,7 @@ class _SavingsPageState extends State<SavingsPage> {
             }
 
             final docs = snapshot.data!.docs;
+            // Inside StreamBuilder, after getting docs:
 
             double totalTarget = 0;
             double totalSaved = 0;
@@ -454,6 +510,9 @@ class _SavingsPageState extends State<SavingsPage> {
                 ...data,
               };
             }).toList();
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+  SavingsNotificationHelper.checkSavingsAlerts(goals);
+});
 
             final overallProgress =
                 totalTarget == 0 ? 0.0 : (totalSaved / totalTarget).clamp(0.0, 1.0);

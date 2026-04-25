@@ -1,19 +1,22 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_fintracker/fintracker_bills.dart';
-import 'package:flutter_fintracker/fintracker_budget.dart';
-import 'package:flutter_fintracker/fintracker_home.dart';
-import 'email_verification_screen.dart';
-import 'forgot_password_screen.dart';
+import 'package:flutter_fintracker/screens/bills/fintracker_bills.dart';
+import 'package:flutter_fintracker/screens/budgets/fintracker_budget.dart';
+import 'package:flutter_fintracker/screens/dashboard/fintracker_home.dart';
+import 'screens/auth/email_verification_screen.dart';
+import 'screens/auth/forgot_password_screen.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:flutter_fintracker/fintracker_login.dart';
-import 'package:flutter_fintracker/fintracker_savings.dart';
-import 'package:flutter_fintracker/fintracker_splitbill.dart';
-import 'package:flutter_fintracker/fintracker_transaction.dart';
+import 'package:flutter_fintracker/screens/auth/fintracker_login.dart';
+import 'package:flutter_fintracker/screens/savings/fintracker_savings.dart';
+import 'package:flutter_fintracker/screens/splitbill/fintracker_splitbill.dart';
+import 'package:flutter_fintracker/screens/transactions/fintracker_transaction.dart';
 import 'firebase_options.dart'; 
 import 'package:firebase_auth/firebase_auth.dart';// correct file name
-import 'notification_service.dart';
-import 'firebase_options.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'services/notification_service.dart';
+import 'package:workmanager/workmanager.dart';
+import 'services/background_service.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -21,6 +24,22 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
   await NotificationService.init();
+
+  // Register background task
+  await Workmanager().initialize(
+    callbackDispatcher,
+    isInDebugMode: false,
+  );
+
+  await Workmanager().registerPeriodicTask(
+    "bill_check_task",
+    taskName,
+    frequency: const Duration(hours: 1),
+    constraints: Constraints(
+      networkType: NetworkType.connected,
+    ),
+  );
+
   runApp(const FinTrackerApp());
 }
 
@@ -84,30 +103,45 @@ class _FinTrackerAppState extends State<FinTrackerApp> {
           },
           '/forgot-password': (_) => const ForgotPasswordScreen(),
         },
+home: StreamBuilder<User?>(
+  stream: FirebaseAuth.instance.authStateChanges(),
+  builder: (context, snapshot) {
+    if (snapshot.connectionState == ConnectionState.waiting) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
 
-        home: StreamBuilder<User?>(
-          stream: FirebaseAuth.instance.authStateChanges(),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Scaffold(
-                body: Center(child: CircularProgressIndicator()),
-              );
-            }
+    if (snapshot.hasData) {
+      final user = snapshot.data!;
 
-            if (snapshot.hasData) {
-              final user = snapshot.data!;
+      if (!user.emailVerified) {
+        return EmailVerificationScreen(email: user.email);
+      }
 
-              if (!user.emailVerified) {
-                return const EmailVerificationScreen();
-              }
+      return FutureBuilder<DocumentSnapshot>(
+        future: FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .get(),
+        builder: (context, userSnap) {
+          if (userSnap.connectionState == ConnectionState.waiting) {
+            return const Scaffold(
+              body: Center(child: CircularProgressIndicator()),
+            );
+          }
 
-              return const FintrackerHome();
-            }
+          // User doc exists and setup is done, OR doc doesn't exist
+          return const FintrackerHome();
+        },
+      );
+    }
 
-            return const LoginPage();
-          },
-        ),
-      ),
+    // No user logged in
+    return const LoginPage();
+  },
+),
+              ),
     );
   }
 }

@@ -1,18 +1,97 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'widgets/side_nav.dart';
-import 'package:flutter_fintracker/fintracker_splitbill.dart';
-import 'package:flutter_fintracker/fintracker_budget.dart';
-import 'package:flutter_fintracker/fintracker_home.dart';
-import 'package:flutter_fintracker/fintracker_transaction.dart';
+import '../../widgets/side_nav.dart';
+import 'package:flutter_fintracker/screens/splitbill/fintracker_splitbill.dart';
+import 'package:flutter_fintracker/screens/budgets/fintracker_budget.dart';
+import 'package:flutter_fintracker/screens/dashboard/fintracker_home.dart';
+import 'package:flutter_fintracker/screens/transactions/fintracker_transaction.dart';
 import 'add_bills.dart';
-import 'fintracker_login.dart';
-import 'previous_tips.dart';
-import 'recurring_payments.dart';
-import 'split_bills_request_page.dart';
+import '../auth/fintracker_login.dart';
+import '../../previous_tips.dart';
+import '../../recurring_payments.dart';
+import '../splitbill/split_bills_request_page.dart';
 import 'fintracker_allBills.dart';
 import 'fintracker_overdue.dart';
+// Add to fintracker_bills.dart
+
+import '../../services/notification_service.dart';
+
+class BillNotificationHelper {
+  /// Call this after loading bills from Firestore.
+  /// Pass the list of bill documents.
+  static Future<void> scheduleBillNotifications(
+    List<QueryDocumentSnapshot> docs,
+  ) async {
+    // Cancel existing bill notifications before rescheduling
+    for (int i = 100; i < 200; i++) {
+      await NotificationService.cancel(i);
+    }
+
+    int idCounter = 100;
+
+    for (final doc in docs) {
+      final data = doc.data() as Map<String, dynamic>;
+      final name = data['name'] ?? 'Bill';
+      final amount = data['amount'] ?? '';
+      final dueDate = (data['nextDueDate'] as Timestamp).toDate();
+      final now = DateTime.now();
+      final diff = dueDate.difference(now).inDays;
+
+      // Already overdue → show immediately
+      if (diff < 0) {
+        await NotificationService.showImmediate(
+          id: idCounter++,
+          title: '🔴 Overdue Bill: $name',
+          body: '₹$amount is overdue! Please pay immediately.',
+          payload: 'bill_overdue_${doc.id}',
+        );
+      }
+
+      // Due in 3 days → schedule reminder at 9 AM that day
+      else if (diff <= 3) {
+        final reminderDate = DateTime(
+          dueDate.year,
+          dueDate.month,
+          dueDate.day,
+          9,
+          0,
+        );
+
+        if (reminderDate.isAfter(now)) {
+          await NotificationService.scheduleNotification(
+            id: idCounter++,
+            title: '⚠️ Bill Due Soon: $name',
+            body: '₹$amount is due in $diff day(s). Tap to review.',
+            scheduledDate: reminderDate,
+            payload: 'bill_due_${doc.id}',
+          );
+        }
+      }
+      // 7-day advance reminder
+      else if (diff <= 7) {
+        final sevenDayReminder = DateTime(
+          dueDate.year,
+          dueDate.month,
+          dueDate.day - 7,
+          9,
+          0,
+        );
+        
+
+        if (sevenDayReminder.isAfter(now)) {
+          await NotificationService.scheduleNotification(
+            id: idCounter++,
+            title: '📅 Upcoming Bill: $name',
+            body: '₹$amount is due on ${dueDate.day}/${dueDate.month}. Plan ahead!',
+            scheduledDate: sevenDayReminder,
+            payload: 'bill_upcoming_${doc.id}',
+          );
+        }
+      }
+    }
+  }
+}
 
 class BillsPage extends StatefulWidget {
   const BillsPage({super.key});
@@ -162,6 +241,10 @@ class _BillsPageState extends State<BillsPage> {
               final bDue = (b['nextDueDate'] as Timestamp).toDate();
               return aDue.compareTo(bDue);
             });
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+  BillNotificationHelper.scheduleBillNotifications(docs);
+});
+
 
           final now = DateTime.now();
           int upcoming = 0;
@@ -279,58 +362,37 @@ class _BillsPageState extends State<BillsPage> {
                   const SizedBox(height: 30),
 
                   /// ================= STAT CARDS =================
-                  Row(
-                    children: [
-                      _buildStatCard(
-                        "Upcoming",
-                        upcoming.toString(),
-                        accent,
-                      ),
-                      const SizedBox(width: 18),
-
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const OverdueBillsPage(),
-                              ),
-                            );
-                          },
-                          child: _buildStatCard(
-                            "Overdue",
-                            overdue.toString(),
-                            danger,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 18),
-
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const AllBillsPage(),
-                              ),
-                            );
-                          },
-                          child: _buildStatCard(
-                            "Total Bills",
-                            total.toString(),
-                            primary,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 40),
+                  // In your build method, replace the stat cards Row with:
+Row(
+  children: [
+    Expanded(
+      child: _buildStatCard("Upcoming", upcoming.toString(), accent),
+    ),
+    const SizedBox(width: 10),
+    Expanded(
+      child: GestureDetector(
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const OverdueBillsPage()),
+        ),
+        child: _buildStatCard("Overdue", overdue.toString(), danger),
+      ),
+    ),
+    const SizedBox(width: 10),
+    Expanded(
+      child: GestureDetector(
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const AllBillsPage()),
+        ),
+        child: _buildStatCard("Total Bills", total.toString(), primary),
+      ),
+    ),
+  ],
+),                  const SizedBox(height: 40),
 
                   const Text(
-                    "Due Today",
+                    "Bill Alerts",
                     style:
                         TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
@@ -389,38 +451,44 @@ class _BillsPageState extends State<BillsPage> {
     }
   }
 
-  Widget _buildStatCard(String title, String value, Color color) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [color.withOpacity(0.75), color],
-          ),
-          borderRadius: BorderRadius.circular(24),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              value,
-              style: const TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              title,
-              style: const TextStyle(color: Colors.white70),
-            ),
-          ],
-        ),
+ Widget _buildStatCard(String title, String value, Color color) {
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16), // ← reduced from 24
+    decoration: BoxDecoration(
+      gradient: LinearGradient(
+        colors: [color.withOpacity(0.75), color],
       ),
-    );
-  }
-
+      borderRadius: BorderRadius.circular(16), // ← reduced from 24
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        FittedBox( // ← this forces text to shrink if needed
+          fit: BoxFit.scaleDown,
+          child: Text(
+            value,
+            style: const TextStyle(
+              fontSize: 26,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+        ),
+        const SizedBox(height: 4),
+        FittedBox( // ← same here
+          fit: BoxFit.scaleDown,
+          child: Text(
+            title,
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 13,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
   Widget _buildBillCard(QueryDocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
 
@@ -561,49 +629,189 @@ class _BillsPageState extends State<BillsPage> {
   }
 
   Future<void> _markAsPaid(QueryDocumentSnapshot doc) async {
-    final data = doc.data() as Map<String, dynamic>;
+  final data = doc.data() as Map<String, dynamic>;
+  final user = FirebaseAuth.instance.currentUser;
+  if (user == null) return;
 
-    final now = DateTime.now();
-    final nextDue =
-        (data['nextDueDate'] as Timestamp).toDate();
+  // Load user accounts first
+  final accountsSnap = await FirebaseFirestore.instance
+      .collection('users')
+      .doc(user!.uid)
+      .collection('accounts')
+      .get();
 
-    final int interval = data['interval'] ?? 1;
+  final accounts = accountsSnap.docs.map((d) {
+    return {
+      'id': d.id,
+      'name': d['name'],
+      'type': d['type'],
+      'balance': (d['balance'] as num).toDouble(),
+    };
+  }).toList();
 
-    final frequency =
-        (data['frequency'] ?? '').toString().toLowerCase();
+  // If no accounts, fall back to old behaviour
+  if (accounts.isEmpty) {
+    await _markAsPaidWithAccount(doc, null, null);
+    return;
+  }
 
-    DateTime updatedNextDue;
+  // Show account picker bottom sheet
+  if (!mounted) return;
+  await showModalBottomSheet(
+    context: context,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
+    builder: (context) {
+      return Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "Pay from which account?",
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              "₹${data['amount']} will be deducted from the selected account",
+              style: const TextStyle(
+                color: Colors.grey,
+                fontSize: 13,
+              ),
+            ),
+            const SizedBox(height: 20),
+            ...accounts.map((acc) {
+              return ListTile(
+                leading: CircleAvatar(
+                  backgroundColor:
+                      const Color(0xFF083549).withOpacity(0.1),
+                  child: Icon(
+                    acc['type'] == 'Bank'
+                        ? Icons.account_balance
+                        : acc['type'] == 'Cash'
+                            ? Icons.wallet
+                            : Icons.phone_android,
+                    color: const Color(0xFF083549),
+                    size: 20,
+                  ),
+                ),
+                title: Text(
+                  acc['name'],
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                subtitle: Text(
+                  "₹${(acc['balance'] as double).toStringAsFixed(0)} available",
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await _markAsPaidWithAccount(
+                    doc,
+                    acc['id'],
+                    acc['name'],
+                  );
+                },
+              );
+            }),
+            const SizedBox(height: 8),
+          ],
+        ),
+      );
+    },
+  );
+}
+Future<void> _markAsPaidWithAccount(
+  QueryDocumentSnapshot doc,
+  String? accountId,
+  String? accountName,
+) async {
+  final data = doc.data() as Map<String, dynamic>;
+  final user = FirebaseAuth.instance.currentUser;
+  if (user == null) return;
 
-    if (frequency == 'monthly') {
-      updatedNextDue = DateTime(
-          nextDue.year, nextDue.month + interval, nextDue.day);
-    } else if (frequency == 'yearly') {
-      updatedNextDue = DateTime(
-          nextDue.year + interval, nextDue.month, nextDue.day);
-    } else {
-      updatedNextDue =
-          nextDue.add(Duration(days: 30 * interval));
-    }
+  final now = DateTime.now();
+  final nextDue = (data['nextDueDate'] as Timestamp).toDate();
+  final int interval = data['interval'] ?? 1;
+  final frequency = (data['frequency'] ?? '').toString().toLowerCase();
 
-    await FirebaseFirestore.instance
-        .collection('transactions')
-        .add({
-      'uid': user!.uid,
-      'amount': data['amount'],
-      'category': data['category'] ?? "Bill",
-      'account': "Bank",
-      'type': 'expense',
-      'date': Timestamp.fromDate(now),
-      'createdAt': FieldValue.serverTimestamp(),
-      'source': 'bill',
-    });
+  // Calculate next due date
+  DateTime updatedNextDue;
+  if (frequency == 'monthly') {
+    updatedNextDue = DateTime(
+      nextDue.year,
+      nextDue.month + interval,
+      nextDue.day,
+    );
+  } else if (frequency == 'yearly') {
+    updatedNextDue = DateTime(
+      nextDue.year + interval,
+      nextDue.month,
+      nextDue.day,
+    );
+  } else {
+    updatedNextDue = nextDue.add(Duration(days: 30 * interval));
+  }
 
-    await FirebaseFirestore.instance
-        .collection('bills')
-        .doc(doc.id)
-        .update({
-      'lastPaidDate': Timestamp.fromDate(now),
-      'nextDueDate': Timestamp.fromDate(updatedNextDue),
+  final amount = (data['amount'] as num).toDouble();
+
+  // Save transaction with account info
+  await FirebaseFirestore.instance.collection('transactions').add({
+    'uid': user.uid,
+    'amount': amount,
+    'category': data['name'] ?? 'Bill',
+    'description': '${data['name']} bill payment',
+    'accountId': accountId,
+    'accountName': accountName ?? 'Cash',
+    'type': 'expense',
+    'date': Timestamp.fromDate(now),
+    'createdAt': FieldValue.serverTimestamp(),
+    'source': 'bill',
+  });
+
+  // Deduct from account balance if account selected
+  if (accountId != null) {
+    final accountRef = FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .collection('accounts')
+        .doc(accountId);
+
+    await FirebaseFirestore.instance.runTransaction((txn) async {
+      final accountSnap = await txn.get(accountRef);
+      if (!accountSnap.exists) return;
+
+      final currentBalance =
+          (accountSnap['balance'] as num).toDouble();
+      txn.update(accountRef, {
+        'balance': currentBalance - amount,
+      });
     });
   }
+
+  // Update bill dates
+  await FirebaseFirestore.instance
+      .collection('bills')
+      .doc(doc.id)
+      .update({
+    'lastPaidDate': Timestamp.fromDate(now),
+    'nextDueDate': Timestamp.fromDate(updatedNextDue),
+  });
+
+  if (!mounted) return;
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text(
+        accountName != null
+            ? "Bill paid from $accountName ✓"
+            : "Bill marked as paid ✓",
+      ),
+      backgroundColor: Colors.green,
+    ),
+  );
+}
 }

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'category_service.dart';
+import 'services/category_service.dart';
 
 class ExpensesPage extends StatefulWidget {
   const ExpensesPage({super.key});

@@ -71,6 +71,7 @@ class _FintrackerSignUpState extends State<FintrackerSignUp> {
         email: emailController.text.trim().toLowerCase(),
         password: passwordController.text.trim(),
       );
+      
 
       // ✅ STEP 2.1: Send verification email
       await userCredential.user!.sendEmailVerification();
@@ -82,6 +83,7 @@ class _FintrackerSignUpState extends State<FintrackerSignUp> {
         'username': username,
         'email': emailController.text.trim().toLowerCase(),
         'createdAt': FieldValue.serverTimestamp(),
+        'hasSetupAccounts': false,
       });
 
       _showSnack('Account created successfully!');
