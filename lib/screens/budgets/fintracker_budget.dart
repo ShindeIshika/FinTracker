@@ -9,6 +9,7 @@ import 'package:flutter_fintracker/previous_tips.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../services/category_service.dart';
+import 'package:flutter_fintracker/screens/accounts/accounts_page.dart';
 // Add to fintracker_budget.dart
 
 import '../../services/notification_service.dart';
@@ -210,9 +211,6 @@ class _BudgetPlannerScreenState extends State<BudgetPlannerScreen> {
 
                   final docs = snapshot.data!.docs;
                   // Inside StreamBuilder, after getting docs:
-WidgetsBinding.instance.addPostFrameCallback((_) {
-  BudgetNotificationHelper.checkBudgetAlerts(docs);
-});
 
                   if (docs.isEmpty) {
                     return const Center(
@@ -610,5 +608,8 @@ Future<void> addBudgetGoal() async {
         MaterialPageRoute(builder: (_) => const BillsPage()),
       );
     }
+    else if (index == 6) {
+      Navigator.pushReplacementNamed(context, '/accounts');
   }
+}
 }

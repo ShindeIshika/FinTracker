@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter_fintracker/services/notification_service.dart';
+import 'package:flutter_fintracker/screens/bills/fintracker_bills.dart';
 
 class AddEditBillPage extends StatefulWidget {
   final DocumentSnapshot? billDoc;
@@ -243,33 +245,43 @@ class _AddEditBillPageState extends State<AddEditBillPage> {
     );
   }
 
-  Future<void> _saveBill() async {
-    if (!_formKey.currentState!.validate()) return;
+ Future<void> _saveBill() async {
+  if (!_formKey.currentState!.validate()) return;
 
-    final data = {
-      'uid': user!.uid,
-      'name': nameController.text,
-      'amount': double.parse(amountController.text),
-      'frequency': frequency,
-      'interval': interval,
-      'nextDueDate': Timestamp.fromDate(selectedDueDate),
-      'createdAt': FieldValue.serverTimestamp(),
-    };
+  final data = {
+    'uid': user!.uid,
+    'name': nameController.text,
+    'amount': double.parse(amountController.text),
+    'frequency': frequency,
+    'interval': interval,
+    'nextDueDate': Timestamp.fromDate(selectedDueDate),
+    'createdAt': FieldValue.serverTimestamp(),
+  };
 
-    if (isEditing) {
-      await FirebaseFirestore.instance
-          .collection('bills')
-          .doc(widget.billDoc!.id)
-          .update(data);
-    } else {
-      await FirebaseFirestore.instance
-          .collection('bills')
-          .add({
-        ...data,
-        'lastPaidDate': null,
-      });
-    }
+  late DocumentReference docRef;
 
-    Navigator.pop(context);
+  if (isEditing) {
+    docRef = FirebaseFirestore.instance
+        .collection('bills')
+        .doc(widget.billDoc!.id);
+
+    await docRef.update(data);
+  } else {
+    docRef = await FirebaseFirestore.instance
+        .collection('bills')
+        .add({
+      ...data,
+      'lastPaidDate': null,
+    });
   }
+
+  await BillNotificationHelper.scheduleForBill(
+    billId: docRef.id,
+    name: nameController.text,
+    amount: double.parse(amountController.text),
+    dueDate: selectedDueDate,
+  );
+
+  Navigator.pop(context);
+}
 }

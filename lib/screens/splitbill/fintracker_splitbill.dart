@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter_fintracker/screens/accounts/accounts_page.dart';
 import 'add_split_bill.dart';
 import '../auth/fintracker_login.dart';
 import '../transactions/fintracker_transaction.dart';
@@ -11,12 +12,11 @@ import '../dashboard/fintracker_home.dart';
 import '../budgets/fintracker_budget.dart';
 import '../bills/fintracker_bills.dart';
 import 'split_bills_request_page.dart';
-// Add to fintracker_splitbill.dart
 
 import '../../services/notification_service.dart';
 
 class SplitBillNotificationHelper {
-  /// Call when pending requests are loaded
+
   static Future<void> notifyPendingRequests(int pendingCount) async {
     if (pendingCount > 0) {
       await NotificationService.showImmediate(
@@ -28,7 +28,6 @@ class SplitBillNotificationHelper {
     }
   }
 
-  /// Call when a payment is settled
   static Future<void> notifySettled(String personName, double amount) async {
     await NotificationService.showImmediate(
       id: 801,
@@ -55,8 +54,6 @@ class _SplitBillPageState extends State<SplitBillPage> {
   final FirebaseFirestore firestore = FirebaseFirestore.instance;
   final FirebaseAuth auth = FirebaseAuth.instance;
   int selectedIndex = 4;
-
-  // ── Helpers ───────────────────────────────────────────────────────────────
 
   String _money(double v) => "₹${v.toStringAsFixed(0)}";
 
@@ -85,8 +82,6 @@ class _SplitBillPageState extends State<SplitBillPage> {
     return p.isEmpty ? 0 : _total(bill) / p.length;
   }
 
-  /// balance > 0  → this uid is owed money (creditor)
-  /// balance < 0  → this uid owes money   (debtor)
   double _balanceOf(Map<String, dynamic> bill, String uid) {
     final share = _share(bill);
     for (final p in _participants(bill)) {
@@ -97,7 +92,6 @@ class _SplitBillPageState extends State<SplitBillPage> {
     return 0;
   }
 
-  /// Derive a stable settlement key for any participant (app user or manual).
   String _debtorKey(Map<String, dynamic> p) {
     final uid = (p["uid"] ?? "").toString();
     final isAppUser = p["isuser"] == true;
@@ -106,13 +100,11 @@ class _SplitBillPageState extends State<SplitBillPage> {
     return "manual_${(p["name"] ?? "unknown").toString().trim().replaceAll(" ", "_")}";
   }
 
-  /// settlement status stored per debtorKey
   String? _settlementStatus(Map<String, dynamic> bill, String debtorKey) {
     final s = Map<String, dynamic>.from(bill["userSettlements"] ?? {});
     return s[debtorKey]?["status"]?.toString();
   }
 
-  // ── Who-owes-who summary strings ─────────────────────────────────────────
   List<String> _oweSummary(Map<String, dynamic> bill) {
     final parts = _participants(bill);
     final share = _share(bill);
@@ -142,17 +134,14 @@ class _SplitBillPageState extends State<SplitBillPage> {
     return result;
   }
 
-  // ── Transaction helpers ───────────────────────────────────────────────────
-
   Future<void> _addTx({
     required String uid,
     required String billId,
     required String billTitle,
     required double amount,
-    required String type,       // "income" | "expense"
-    required String roleTag,    // unique per person per bill
+    required String type,       
+    required String roleTag,    
   }) async {
-    // Skip writing a transaction if there is no real uid (manual participant)
     if (uid.isEmpty) return;
 
     final col = firestore.collection("transactions");
@@ -623,45 +612,42 @@ class _SplitBillPageState extends State<SplitBillPage> {
 
   // ── Delete bill ───────────────────────────────────────────────────────────
   Future<void> _deleteBill(String billId, DocumentReference ref) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text("Delete Bill"),
-        content: const Text("Are you sure?"),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text("Cancel")),
-          ElevatedButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text("Delete")),
-        ],
-      ),
-    );
-    if (ok != true) return;
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (_) => AlertDialog(
+      title: const Text("Delete Bill"),
+      content: const Text("Are you sure?"),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text("Cancel"),
+        ),
+        ElevatedButton(
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text("Delete"),
+        ),
+      ],
+    ),
+  );
 
-    final batch = firestore.batch();
-    for (final doc in (await firestore
-            .collection("split_bill_requests")
-            .where("billId", isEqualTo: billId)
-            .get())
-        .docs) {
-      batch.delete(doc.reference);
-    }
-    for (final tx in (await firestore
-            .collection("transactions")
-            .where("splitBillId", isEqualTo: billId)
-            .get())
-        .docs) {
-      batch.delete(tx.reference);
-    }
-    batch.delete(ref);
-    await batch.commit();
+  if (ok != true) return;
+
+  try {
+    await firestore.collection("split_bills").doc(billId).delete();
 
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text("Bill deleted")));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Bill deleted")),
+    );
+  } catch (e) {
+    print("DELETE ERROR: $e");
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text("Delete failed: $e")),
+    );
   }
+}
 
   // ── Build ─────────────────────────────────────────────────────────────────
   @override
@@ -764,6 +750,11 @@ class _SplitBillPageState extends State<SplitBillPage> {
                 Navigator.pushReplacement(context,
                     MaterialPageRoute(
                         builder: (_) => const BillsPage()));
+                break;
+              case 6:
+                Navigator.pushReplacement(context,
+                    MaterialPageRoute(
+                        builder: (_) => const AccountsPage()));
                 break;
             }
           },

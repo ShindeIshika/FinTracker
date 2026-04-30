@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter_fintracker/screens/accounts/accounts_page.dart';
 import 'package:flutter_fintracker/screens/budgets/fintracker_budget.dart';
+import 'package:flutter_fintracker/screens/dashboard/fintracker_home.dart';
 import 'package:flutter_fintracker/screens/savings/fintracker_savings.dart';
 import 'package:flutter_fintracker/screens/splitbill/fintracker_splitbill.dart';
 import 'package:flutter_fintracker/screens/bills/fintracker_bills.dart';
@@ -51,12 +53,13 @@ class _TransactionsPageState extends State<TransactionsPage> {
   void handleNavTap(int index) {
     if (index == selectedNavIndex) { Navigator.pop(context); return; }
     switch (index) {
-      case 0: Navigator.pop(context); break;
+      case 0: Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const DashboardScreen())); break;
       case 1: Navigator.pop(context); break;
       case 2: Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const BudgetPlannerScreen())); break;
       case 3: Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const SavingsPage())); break;
       case 4: Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const SplitBillPage())); break;
       case 5: Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const BillsPage())); break;
+      case 6: Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const AccountsPage())); break;
     }
   }
 

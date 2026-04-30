@@ -16,27 +16,41 @@ import 'package:flutter_fintracker/recurring_payments.dart';
 import '../../widgets/side_nav.dart';
 import '../splitbill/split_bills_request_page.dart';
 import 'package:http/http.dart' as http;
+import 'package:flutter_fintracker/screens/accounts/accounts_page.dart';
+import 'package:flutter_fintracker/services/notification_service.dart';
 
 final List<Map<String, String>> financeTips = [
   {
     "term": "Emergency Fund",
-    "tip": "Save at least 3–6 months of expenses for unexpected situations."
+    "tip": "Start by saving ₹500–₹1000 every month in a separate account. Gradually build a fund equal to 3 months of your expenses. Only use this for emergencies like medical issues or job loss."
   },
   {
     "term": "50/30/20 Rule",
-    "tip": "50% needs, 30% wants, 20% savings."
+    "tip": "Divide your income: 50% for needs (rent, food), 30% for wants (shopping, entertainment), and 20% for savings. Track your current spending and adjust one category at a time."
   },
   {
-    "term": "Compound Interest",
-    "tip": "Money grows faster when interest earns interest."
+    "term": "Avoid Impulse Spending",
+    "tip": "Before buying anything non-essential, wait 24 hours. If you still feel it’s necessary, then buy it. This simple delay reduces unnecessary spending significantly."
   },
   {
-    "term": "Budget",
-    "tip": "A plan for every rupee gives you control, not restriction."
+    "term": "Track Daily Expenses",
+    "tip": "Log every expense immediately after spending. Even small amounts like ₹20 matter. This helps you identify hidden spending patterns at the end of the month."
   },
   {
-    "term": "SIP",
-    "tip": "Invest a fixed amount regularly to reduce market risk."
+    "term": "Savings First Approach",
+    "tip": "As soon as you receive income, transfer at least 10–20% to savings before spending anything. Treat savings like a fixed expense."
+  },
+  {
+    "term": "Reduce Subscription Waste",
+    "tip": "Check all your subscriptions (Netflix, Spotify, etc.). Cancel the ones you haven’t used in the last 30 days to save money effortlessly."
+  },
+  {
+    "term": "Smart Grocery Spending",
+    "tip": "Make a shopping list before going to the store and stick to it. Avoid shopping when hungry—it leads to overspending."
+  },
+  {
+    "term": "Use Categories Wisely",
+    "tip": "Always assign a category to each expense. At the end of the month, check which category is highest and reduce it next month."
   },
 ];
 
@@ -62,6 +76,7 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  bool _scheduled = false;
 
   bool _tipShownThisSession = false;
   bool _tipShown = false;
@@ -96,6 +111,47 @@ class _DashboardScreenState extends State<DashboardScreen> {
       return "Spending – Year $selectedPieYear";
     }
   }
+
+  
+
+  Future<bool> _checkAccountBeforeTransaction() async {
+  final user = _auth.currentUser;
+  if (user == null) return false;
+
+  final accountsSnapshot = await _firestore
+      .collection('users')
+      .doc(user.uid)
+      .collection('accounts')
+      .get();
+
+  if (accountsSnapshot.docs.isEmpty) {
+    if (!mounted) return false;
+
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text("No Account Found"),
+        content: const Text("Please add an account before adding transactions."),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const AccountsPage()),
+              );
+            },
+            child: const Text("Add Account"),
+          ),
+        ],
+      ),
+    );
+
+    return false;
+  }
+
+  return true;
+}
 
   // ── Fetch tip from API ────────────────────────────────────────────────────
   Future<Map<String, String>?> fetchTipFromAPI() async {
@@ -275,138 +331,110 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   // ── Show local tip (Firestore-based) ─────────────────────────────────────
   Future<void> showLoginTipIfNeeded() async {
-    if (_tipShownThisSession) return;
+  if (_tipShownThisSession) return;
 
-    final user = _auth.currentUser;
-    if (user == null) return;
+  final user = _auth.currentUser;
+  if (user == null) return;
 
-    _tipShownThisSession = true;
+  _tipShownThisSession = true;
 
-    try {
-      final previousTipsRef = _firestore
-          .collection('users')
-          .doc(user.uid)
-          .collection('previous_tips');
+  final today = DateTime.now().toIso8601String().split('T').first;
 
-      final previousTipsSnapshot = await previousTipsRef.get();
+  try {
+    final tipsRef = _firestore
+        .collection('users')
+        .doc(user.uid)
+        .collection('previous_tips');
 
-      final Set<String> shownTerms = previousTipsSnapshot.docs
-          .map((doc) {
-            final data = doc.data();
-            return (data['term'] ?? '').toString().trim();
-          })
-          .where((term) => term.isNotEmpty)
-          .toSet();
+    final todayDoc = await tipsRef.doc(today).get();
 
-      final List<Map<String, String>> unseenTips = financeTips.where((tip) {
-        final term = (tip['term'] ?? '').trim();
-        return !shownTerms.contains(term);
-      }).toList();
+    // If today's tip already shown, do not show again
+    if (todayDoc.exists) return;
 
-      if (unseenTips.isEmpty) return;
+    final selectedTip = financeTips[Random().nextInt(financeTips.length)];
 
-      final Map<String, String> selectedTip =
-          unseenTips[Random().nextInt(unseenTips.length)];
+    await tipsRef.doc(today).set({
+      'term': selectedTip['term'],
+      'tip': selectedTip['tip'],
+      'date': today,
+      'shownAt': FieldValue.serverTimestamp(),
+    });
 
-      final String term = selectedTip['term'] ?? '';
-      final String tip = selectedTip['tip'] ?? '';
+    if (!mounted) return;
 
-      final String docId = term.replaceAll(' ', '_').toLowerCase();
-
-      final existingDoc = await previousTipsRef.doc(docId).get();
-      if (!existingDoc.exists) {
-        await previousTipsRef.doc(docId).set({
-          'term': term,
-          'tip': tip,
-          'date': DateTime.now().toIso8601String().split('T').first,
-          'shownAt': FieldValue.serverTimestamp(),
-        });
-      }
-
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
 
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        builder: (_) {
+          return Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.lightbulb_outline,
+                  color: Color(0xFF083549),
+                  size: 42,
+                ),
+                const SizedBox(height: 12),
 
-        showModalBottomSheet(
-          context: context,
-          isScrollControlled: true,
-          shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          builder: (_) {
-            return Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 40,
-                    height: 4,
-                    margin: const EdgeInsets.only(bottom: 16),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade400,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  const Icon(
-                    Icons.lightbulb_outline,
+                Text(
+                  selectedTip['term']!,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
                     color: Color(0xFF083549),
-                    size: 40,
                   ),
-                  const SizedBox(height: 12),
-                  Text(
-                    "💡 $term",
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF083549),
-                    ),
-                    textAlign: TextAlign.center,
+                  textAlign: TextAlign.center,
+                ),
+
+                const SizedBox(height: 10),
+
+                Text(
+                  selectedTip['tip']!,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: Colors.black87,
+                    height: 1.5,
                   ),
-                  const SizedBox(height: 10),
-                  Text(
-                    tip,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      color: Colors.black87,
-                      height: 1.4,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 20),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF083549),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      onPressed: () => Navigator.of(context).pop(),
-                      child: const Text(
-                        "Got it",
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
+                  textAlign: TextAlign.center,
+                ),
+
+                const SizedBox(height: 20),
+
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF083549),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
                       ),
                     ),
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text(
+                      "Got it",
+                      style: TextStyle(color: Colors.white),
+                    ),
                   ),
-                  const SizedBox(height: 10),
-                ],
-              ),
-            );
-          },
-        );
-      });
-    } catch (e) {
-      debugPrint("Error showing login tip: $e");
-    }
+                ),
+              ],
+            ),
+          );
+        },
+      );
+    });
+  } catch (e) {
+    debugPrint("Error showing daily tip: $e");
   }
+}
 
   @override
   void initState() {
@@ -414,11 +442,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       showLoginTipIfNeeded();
     });
-    Future.delayed(const Duration(milliseconds: 500), () {
-      showTipOfTheDay();
-    });
     fetchDashboardData();
     fetchUserName();
+   if (!_scheduled) {
+    NotificationService.scheduleDailyExpenseReminders();
+    _scheduled = true;
+  }
+  NotificationService.scheduleSavingsReminder();
     _generateRecurringTransactions();
   }
 
@@ -497,6 +527,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Navigator.pushReplacement(context,
             MaterialPageRoute(builder: (_) => const BillsPage()));
         break;
+      case 6:
+  Navigator.push(
+    context,
+    MaterialPageRoute(builder: (_) => const AccountsPage()),
+  );
+  break;
     }
   }
 
@@ -721,6 +757,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Text("Welcome, $firstName",
                   style: const TextStyle(fontSize: 16, color: Colors.blueGrey)),
               const SizedBox(height: 20),
+              AccountSummaryWidget(
+  onTap: () => Navigator.push(
+    context,
+    MaterialPageRoute(builder: (_) => const AccountsPage()),
+  ),
+),
+const SizedBox(height: 12),
 
               Row(
                 children: [
@@ -761,22 +804,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       icon: Icons.add_circle_outline,
                       label: "Add Income",
                       color: const Color.fromARGB(255, 2, 135, 7),
-                      onPressed: () async {
-                        final result = await Navigator.push(context,
-                            MaterialPageRoute(builder: (_) => AddTransactionPage(type: 'income')));
-                        if (result == true) fetchDashboardData();
-                      },
+                     onPressed: () async {
+  final canAdd = await _checkAccountBeforeTransaction();
+  if (!canAdd) return;
+
+  final result = await Navigator.push(
+    context,
+    MaterialPageRoute(builder: (_) => AddTransactionPage(type: 'income')),
+  );
+
+  if (result == true) fetchDashboardData();
+},
                     ),
                     const SizedBox(width: 10),
                     _quickActionButton(
                       icon: Icons.remove_circle_outline,
                       label: "Add Expense",
                       color: const Color.fromARGB(255, 194, 21, 9),
-                      onPressed: () async {
-                        final result = await Navigator.push(context,
-                            MaterialPageRoute(builder: (_) => AddTransactionPage(type: 'expense')));
-                        if (result == true) fetchDashboardData();
-                      },
+                     onPressed: () async {
+  final canAdd = await _checkAccountBeforeTransaction();
+  if (!canAdd) return;
+
+  final result = await Navigator.push(
+    context,
+    MaterialPageRoute(builder: (_) => AddTransactionPage(type: 'expense')),
+  );
+
+  if (result == true) fetchDashboardData();
+},
                     ),
                   ],
                 ),

@@ -13,79 +13,77 @@ import '../../recurring_payments.dart';
 import '../splitbill/split_bills_request_page.dart';
 import 'fintracker_allBills.dart';
 import 'fintracker_overdue.dart';
+import 'package:flutter_fintracker/screens/accounts/accounts_page.dart';
 // Add to fintracker_bills.dart
 
 import '../../services/notification_service.dart';
 
 class BillNotificationHelper {
-  /// Call this after loading bills from Firestore.
-  /// Pass the list of bill documents.
-  static Future<void> scheduleBillNotifications(
-    List<QueryDocumentSnapshot> docs,
-  ) async {
-    // Cancel existing bill notifications before rescheduling
-    for (int i = 100; i < 200; i++) {
-      await NotificationService.cancel(i);
+  static int _billNotifId(String billId, int dayOffset) {
+    return billId.hashCode.abs() + dayOffset;
+  }
+
+  static Future<void> cancelBillNotifications(String billId) async {
+    // 3,2,1,0 = before/due date
+    // 10-16 = overdue reminders
+    for (int offset in [3, 2, 1, 0, 10, 11, 12, 13, 14, 15, 16]) {
+      await NotificationService.cancel(_billNotifId(billId, offset));
+    }
+  }
+
+  static Future<void> scheduleForBill({
+    required String billId,
+    required String name,
+    required double amount,
+    required DateTime dueDate,
+  }) async {
+    await cancelBillNotifications(billId);
+
+    final now = DateTime.now();
+
+    // 3 days before, 2 days before, 1 day before, due day
+    for (int daysBefore in [3, 2, 1, 0]) {
+      final reminderDate = DateTime(
+        dueDate.year,
+        dueDate.month,
+        dueDate.day - daysBefore,
+        9,
+        0,
+      );
+
+      if (reminderDate.isAfter(now)) {
+        await NotificationService.scheduleNotification(
+          id: _billNotifId(billId, daysBefore),
+          title: daysBefore == 0
+              ? "🔴 Bill Due Today: $name"
+              : "⚠️ Bill Due Soon: $name",
+          body: daysBefore == 0
+              ? "₹$amount is due today. Please pay it."
+              : "₹$amount is due in $daysBefore day(s).",
+          scheduledDate: reminderDate,
+          payload: "bill_$billId",
+        );
+      }
     }
 
-    int idCounter = 100;
-
-    for (final doc in docs) {
-      final data = doc.data() as Map<String, dynamic>;
-      final name = data['name'] ?? 'Bill';
-      final amount = data['amount'] ?? '';
-      final dueDate = (data['nextDueDate'] as Timestamp).toDate();
-      final now = DateTime.now();
-      final diff = dueDate.difference(now).inDays;
-
-      // Already overdue → show immediately
-      if (diff < 0) {
-        await NotificationService.showImmediate(
-          id: idCounter++,
-          title: '🔴 Overdue Bill: $name',
-          body: '₹$amount is overdue! Please pay immediately.',
-          payload: 'bill_overdue_${doc.id}',
-        );
-      }
-
-      // Due in 3 days → schedule reminder at 9 AM that day
-      else if (diff <= 3) {
-        final reminderDate = DateTime(
-          dueDate.year,
-          dueDate.month,
-          dueDate.day,
+    // If already overdue, schedule daily reminders for next 7 days
+    if (dueDate.isBefore(now)) {
+      for (int i = 0; i < 7; i++) {
+        final overdueReminder = DateTime(
+          now.year,
+          now.month,
+          now.day + i,
           9,
           0,
         );
 
-        if (reminderDate.isAfter(now)) {
+        if (overdueReminder.isAfter(now)) {
           await NotificationService.scheduleNotification(
-            id: idCounter++,
-            title: '⚠️ Bill Due Soon: $name',
-            body: '₹$amount is due in $diff day(s). Tap to review.',
-            scheduledDate: reminderDate,
-            payload: 'bill_due_${doc.id}',
-          );
-        }
-      }
-      // 7-day advance reminder
-      else if (diff <= 7) {
-        final sevenDayReminder = DateTime(
-          dueDate.year,
-          dueDate.month,
-          dueDate.day - 7,
-          9,
-          0,
-        );
-        
-
-        if (sevenDayReminder.isAfter(now)) {
-          await NotificationService.scheduleNotification(
-            id: idCounter++,
-            title: '📅 Upcoming Bill: $name',
-            body: '₹$amount is due on ${dueDate.day}/${dueDate.month}. Plan ahead!',
-            scheduledDate: sevenDayReminder,
-            payload: 'bill_upcoming_${doc.id}',
+            id: _billNotifId(billId, 10 + i),
+            title: "🔴 Overdue Bill: $name",
+            body: "₹$amount is overdue. Please mark it as paid.",
+            scheduledDate: overdueReminder,
+            payload: "bill_overdue_$billId",
           );
         }
       }
@@ -241,9 +239,7 @@ class _BillsPageState extends State<BillsPage> {
               final bDue = (b['nextDueDate'] as Timestamp).toDate();
               return aDue.compareTo(bDue);
             });
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-  BillNotificationHelper.scheduleBillNotifications(docs);
-});
+           
 
 
           final now = DateTime.now();
@@ -448,6 +444,12 @@ Row(
         break;
       case 5:
         break;
+      case 6:
+  Navigator.push(
+    context,
+    MaterialPageRoute(builder: (_) => const AccountsPage()),
+  );
+  break;
     }
   }
 
@@ -649,6 +651,8 @@ Row(
     };
   }).toList();
 
+  
+
   // If no accounts, fall back to old behaviour
   if (accounts.isEmpty) {
     await _markAsPaidWithAccount(doc, null, null);
@@ -801,6 +805,12 @@ Future<void> _markAsPaidWithAccount(
     'lastPaidDate': Timestamp.fromDate(now),
     'nextDueDate': Timestamp.fromDate(updatedNextDue),
   });
+  await BillNotificationHelper.scheduleForBill(
+  billId: doc.id,
+  name: data['name'] ?? 'Bill',
+  amount: amount,
+  dueDate: updatedNextDue,
+);
 
   if (!mounted) return;
   ScaffoldMessenger.of(context).showSnackBar(

@@ -16,6 +16,87 @@ class NotificationService {
     playSound: true,
   );
 
+  static Future<void> scheduleSavingsReminder() async {
+  await scheduleDailyReminder(
+    id: 6001,
+    title: "💰 Small savings, big progress",
+    body: "Add a small amount to your savings goal today. Even ₹50 counts!",
+    hour: 18,
+    minute: 30,
+    payload: "daily_savings_reminder",
+  );
+}
+
+static Future<void> scheduleDailyReminder({
+  required int id,
+  required String title,
+  required String body,
+  required int hour,
+  required int minute,
+  String? payload,
+}) async {
+  final now = tz.TZDateTime.now(tz.local);
+
+  var scheduledTime = tz.TZDateTime(
+    tz.local,
+    now.year,
+    now.month,
+    now.day,
+    hour,
+    minute,
+  );
+
+  if (scheduledTime.isBefore(now)) {
+    scheduledTime = scheduledTime.add(const Duration(days: 1));
+  }
+
+  await _plugin.zonedSchedule(
+    id,
+    title,
+    body,
+    scheduledTime,
+    NotificationDetails(
+      android: AndroidNotificationDetails(
+        _androidChannel.id,
+        _androidChannel.name,
+        channelDescription: _androidChannel.description,
+        importance: Importance.max,
+        priority: Priority.high,
+        icon: '@mipmap/ic_launcher',
+      ),
+      iOS: const DarwinNotificationDetails(
+        presentAlert: true,
+        presentBadge: true,
+        presentSound: true,
+      ),
+    ),
+    payload: payload,
+    androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+    uiLocalNotificationDateInterpretation:
+        UILocalNotificationDateInterpretation.absoluteTime,
+    matchDateTimeComponents: DateTimeComponents.time,
+  );
+}
+
+static Future<void> scheduleDailyExpenseReminders() async {
+  await scheduleDailyReminder(
+    id: 5001,
+    title: "💰 Track your spending",
+    body: "Don’t forget to add today’s income or expenses.",
+    hour: 14,
+    minute: 0,
+    payload: "daily_tracker_afternoon",
+  );
+
+  await scheduleDailyReminder(
+    id: 5002,
+    title: "📊 Update FinTracker",
+    body: "Quick reminder to record your transactions for the day.",
+    hour: 19,
+    minute: 0,
+    payload: "daily_tracker_evening",
+  );
+}
   // ─── Initialize ───────────────────────────────────────────────
   static Future<void> init() async {
     tz_data.initializeTimeZones();

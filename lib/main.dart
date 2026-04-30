@@ -14,6 +14,7 @@ import 'package:firebase_auth/firebase_auth.dart';// correct file name
 import 'services/notification_service.dart';
 import 'package:workmanager/workmanager.dart';
 import 'services/background_service.dart';
+import 'package:flutter_fintracker/screens/accounts/accounts_page.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 
@@ -96,6 +97,8 @@ class _FinTrackerAppState extends State<FinTrackerApp> {
           '/savings': (_) => const SavingsPage(),
           '/split': (_) => const SplitBillPage(),
           '/bills': (_) => const BillsPage(),
+          // In the routes map:
+        '/accounts': (_) => const AccountsPage(),
           '/verify-email': (context) {
             final email =
                 ModalRoute.of(context)?.settings.arguments as String?;

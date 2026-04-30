@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter_fintracker/screens/accounts/accounts_page.dart';
 
 import 'package:flutter_fintracker/screens/dashboard/fintracker_home.dart';
 import 'package:flutter_fintracker/screens/transactions/fintracker_transaction.dart';
@@ -137,6 +138,12 @@ class _SavingsPageState extends State<SavingsPage> {
           MaterialPageRoute(builder: (_) => const BillsPage()),
         );
         break;
+        case 6:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const AccountsPage()),
+        );
+        break;
     }
   }
 
@@ -158,6 +165,7 @@ class _SavingsPageState extends State<SavingsPage> {
     final targetController = TextEditingController();
     final savedController = TextEditingController();
     final estimatedController = TextEditingController();
+    final descriptionController = TextEditingController();
 
     String selectedIcon = 'shield';
 
@@ -179,6 +187,15 @@ class _SavingsPageState extends State<SavingsPage> {
                       ),
                     ),
                     const SizedBox(height: 10),
+TextField(
+  controller: descriptionController,
+  maxLines: 2,
+  decoration: const InputDecoration(
+    labelText: "Description",
+  ),
+),
+                    const SizedBox(height: 10),
+                    
                     TextField(
                       controller: targetController,
                       keyboardType: TextInputType.number,
@@ -255,6 +272,7 @@ class _SavingsPageState extends State<SavingsPage> {
                     if (user == null) return;
 
                     final title = titleController.text.trim();
+                    final description = descriptionController.text.trim();
                     final target =
                         double.tryParse(targetController.text.trim()) ?? 0;
                     final saved =
@@ -266,6 +284,7 @@ class _SavingsPageState extends State<SavingsPage> {
                     await _firestore.collection('savings_goals').add({
                       'uid': user.uid,
                       'title': title,
+                      'description': description,
                       'targetAmount': target,
                       'savedAmount': saved,
                       'iconKey': selectedIcon,
@@ -340,6 +359,26 @@ class _SavingsPageState extends State<SavingsPage> {
                   'savedAmount': newSaved > targetAmount ? targetAmount : newSaved,
                   'updatedAt': FieldValue.serverTimestamp(),
                 });
+                final updatedSaved =
+    newSaved > targetAmount ? targetAmount : newSaved;
+
+final progress = updatedSaved / targetAmount;
+
+if (progress >= 1.0) {
+  await NotificationService.showImmediate(
+    id: goalId.hashCode + 500,
+    title: "🎉 Savings Goal Achieved!",
+    body: "Congratulations! You reached your savings target.",
+    payload: "savings_complete_$goalId",
+  );
+} else if (progress >= 0.75) {
+  await NotificationService.showImmediate(
+    id: goalId.hashCode + 600,
+    title: "💪 Almost there!",
+    body: "You have completed ${(progress * 100).toStringAsFixed(0)}% of this savings goal.",
+    payload: "savings_75_$goalId",
+  );
+}
 
                 await _firestore
                     .collection('savings_goals')
@@ -510,9 +549,7 @@ class _SavingsPageState extends State<SavingsPage> {
                 ...data,
               };
             }).toList();
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-  SavingsNotificationHelper.checkSavingsAlerts(goals);
-});
+
 
             final overallProgress =
                 totalTarget == 0 ? 0.0 : (totalSaved / totalTarget).clamp(0.0, 1.0);
@@ -733,6 +770,7 @@ class _SavingsPageState extends State<SavingsPage> {
     final progress = target == 0 ? 0.0 : (saved / target).clamp(0.0, 1.0);
     final percent = (progress * 100).round();
     final remaining = (target - saved).clamp(0, double.infinity);
+    final description = goal['description'] ?? '';
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -775,7 +813,9 @@ class _SavingsPageState extends State<SavingsPage> {
                     color: Colors.black,
                   ),
                 ),
+                
               ),
+              
               IconButton(
                 onPressed: () => deleteGoal(goalId),
                 icon: const Icon(Icons.delete_outline),
@@ -783,6 +823,16 @@ class _SavingsPageState extends State<SavingsPage> {
               ),
             ],
           ),
+          if (description.toString().trim().isNotEmpty) ...[
+  const SizedBox(height: 8),
+  Text(
+    description,
+    style: const TextStyle(
+      fontSize: 13,
+      color: Colors.blueGrey,
+    ),
+  ),
+],
 
           const SizedBox(height: 20),
 

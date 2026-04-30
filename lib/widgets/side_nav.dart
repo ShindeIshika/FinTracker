@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_fintracker/screens/accounts/accounts_page.dart';
 import '../main.dart'; // for ThemeController
 
 class SideNav extends StatefulWidget {
@@ -27,6 +28,7 @@ class _SideNavState extends State<SideNav> {
       {'icon': Icons.savings, 'label': 'Savings'},
       {'icon': Icons.group, 'label': 'SplitTheBill'},
       {'icon': Icons.receipt, 'label': 'Bill Manager'},
+      {'icon': Icons.account_balance_wallet, 'label': 'Accounts'},
     ];
 
     final theme = ThemeController.of(context); // access dark mode controller
